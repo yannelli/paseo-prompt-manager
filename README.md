@@ -9,7 +9,7 @@ Requires Paseo `0.8.0-beta.1` or later on the daemon and app. Git sync also requ
 Enable plugins in **Settings → Plugins**, then install the release:
 
 ```sh
-paseo plugin add yannelli/paseo-prompt-manager --ref v0.1.0
+paseo plugin add yannelli/paseo-prompt-manager --ref v0.2.0
 ```
 
 Open **Prompts** in the sidebar to manage your library. Paseo provides the plugin's runtime dependencies.
