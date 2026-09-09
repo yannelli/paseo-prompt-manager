@@ -4,7 +4,20 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 
 const execute = promisify(execFile);
-const promptPath = /^(?:[a-z0-9]+(?:-[a-z0-9]+)*\.md|versions\/([a-z0-9]+(?:-[a-z0-9]+)*)\/\1\.\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z_v[1-9]\d*\.md)$/;
+const segment = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+function isPromptPath(path: string) {
+  const parts = path.split("/");
+  if (parts[0] === "versions") {
+    const filename = parts.pop()!;
+    parts.shift();
+    const name = parts.at(-1);
+    return Boolean(name && segment.test(name) && parts.slice(0, -1).every((part) => part !== "versions" && segment.test(part)) &&
+      filename.startsWith(`${name}.`) && /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z_v[1-9]\d*\.md$/.test(filename.slice(name.length + 1)));
+  }
+  const filename = parts.pop()!;
+  return filename.endsWith(".md") && segment.test(filename.slice(0, -3)) &&
+    parts.every((part) => part !== "versions" && segment.test(part));
+}
 
 async function git(root: string, args: string[]) {
   try {
@@ -55,18 +68,15 @@ export async function initializeGit(root: string, remote: string) {
 
 async function managedFiles(root: string) {
   const files: string[] = [];
-  for (const entry of await readdir(root, { withFileTypes: true })) {
-    if (entry.isFile() && promptPath.test(entry.name)) files.push(entry.name);
-    if (entry.name !== "versions" || !entry.isDirectory()) continue;
-    for (const directory of await readdir(join(root, "versions"), { withFileTypes: true })) {
-      if (!directory.isDirectory()) continue;
-      for (const version of await readdir(join(root, "versions", directory.name), { withFileTypes: true })) {
-        const path = `versions/${directory.name}/${version.name}`;
-        if (version.isFile() && promptPath.test(path)) files.push(path);
-      }
+  const walk = async (prefix = "") => {
+    for (const entry of await readdir(join(root, prefix), { withFileTypes: true })) {
+      const path = prefix ? `${prefix}/${entry.name}` : entry.name;
+      if (entry.isFile() && isPromptPath(path)) files.push(path);
+      if (entry.isDirectory() && segment.test(entry.name) && (entry.name !== "versions" || !prefix || prefix === "versions" || prefix.startsWith("versions/"))) await walk(path);
     }
-  }
-  const tracked = (await git(root, ["ls-files", "-z"])).split("\0").filter((path) => promptPath.test(path));
+  };
+  await walk();
+  const tracked = (await git(root, ["ls-files", "-z"])).split("\0").filter(isPromptPath);
   return [...new Set([...files, ...tracked])];
 }
 
@@ -74,7 +84,7 @@ export async function synchronizeGit(root: string) {
   const status = await gitStatus(root);
   if (!status.initialized) throw new Error("Initialize Git in the prompt directory first.");
   const staged = (await git(root, ["diff", "--cached", "--name-only", "-z"])).split("\0").filter(Boolean);
-  if (staged.some((path) => !promptPath.test(path))) throw new Error("Commit or unstage unrelated files before syncing prompts.");
+  if (staged.some((path) => !isPromptPath(path))) throw new Error("Commit or unstage unrelated files before syncing prompts.");
   const files = await managedFiles(root);
   for (let offset = 0; offset < files.length; offset += 100) {
     await git(root, ["add", "-A", "--", ...files.slice(offset, offset + 100)]);

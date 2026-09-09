@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -75,4 +75,24 @@ test("nested library does not use its parent repository", async (t) => {
   assert.equal((await gitStatus(nested)).initialized, false);
   await assert.rejects(synchronizeGit(nested), /Initialize Git/);
   await assert.rejects(initializeGit(nested, "--upload-pack=bad"), /Use an HTTPS/);
+});
+
+test("sync tracks nested prompts, metadata, and moved version history", async (t) => {
+  const { root } = await fixture(t);
+  const history = "review.2026-09-09T00-00-00-000Z_v1.md";
+  const content = '---\npaseo: {"description":"Review changes","tags":["security"]}\n---\n# Review\nCheck changes.';
+  await mkdir(join(root, "engineering", "security"), { recursive: true });
+  await mkdir(join(root, "versions", "engineering", "security", "review"), { recursive: true });
+  await writeFile(join(root, "engineering", "security", "review.md"), content);
+  await writeFile(join(root, "versions", "engineering", "security", "review", history), content);
+  await writeFile(join(root, "engineering", "private.txt"), "unrelated");
+  await synchronizeGit(root);
+  assert.deepEqual(command(root, "ls-files").split("\n"), ["engineering/security/review.md", `versions/engineering/security/review/${history}`]);
+  assert.equal(command(root, "show", "HEAD:engineering/security/review.md"), content);
+  await mkdir(join(root, "versions", "operations"), { recursive: true });
+  await mkdir(join(root, "operations"), { recursive: true });
+  await rename(join(root, "engineering", "security", "review.md"), join(root, "operations", "review.md"));
+  await rename(join(root, "versions", "engineering", "security", "review"), join(root, "versions", "operations", "review"));
+  await synchronizeGit(root);
+  assert.deepEqual(command(root, "ls-files").split("\n"), ["operations/review.md", `versions/operations/review/${history}`]);
 });

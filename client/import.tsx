@@ -3,6 +3,7 @@ import { useRpc } from "@getpaseo/plugin/client";
 import { useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { importPrompts, type ImportResult } from "../shared/prompts";
+import { FolderPicker, FolderBreadcrumb } from "./editor";
 import { canPickFiles, pickMarkdown } from "./web";
 
 type Props = {
@@ -11,11 +12,14 @@ type Props = {
   run: (action: () => Promise<void>) => void;
   onImported: () => Promise<void>;
   onBack: () => void;
+  folders: string[];
+  initialFolder: string;
 };
 
-export function ImportPrompts({ theme, busy, run, onImported, onBack }: Props) {
+export function ImportPrompts({ theme, busy, run, onImported, onBack, folders, initialFolder }: Props) {
   const colors = theme.colors;
   const importRpc = useRpc(importPrompts);
+  const [folder, setFolder] = useState(initialFolder);
   const [paths, setPaths] = useState("");
   const [result, setResult] = useState<ImportResult | null>(null);
   const text = { color: colors.foreground };
@@ -26,14 +30,14 @@ export function ImportPrompts({ theme, busy, run, onImported, onBack }: Props) {
       <Text style={{ ...text, fontWeight: "600" }}>{title}</Text>
     </Pressable>
   );
-  const pick = (folder: boolean) => run(async () => {
-    const files = await pickMarkdown(folder);
+  const pick = (directory: boolean) => run(async () => {
+    const files = await pickMarkdown(directory);
     if (!files.length) return;
     setResult(null);
     const summary: ImportResult = { imported: [], skipped: [] };
     for (const file of files) {
       try {
-        const batch = await importRpc({ paths: [], files: [file] });
+        const batch = await importRpc({ paths: [], files: [file], folder });
         summary.imported.push(...batch.imported);
         summary.skipped.push(...batch.skipped);
       } catch (error) {
@@ -45,10 +49,15 @@ export function ImportPrompts({ theme, busy, run, onImported, onBack }: Props) {
   });
 
   return (
-    <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 16, paddingBottom: 28, maxWidth: 720 }}>
+    <ScrollView keyboardShouldPersistTaps="handled" style={{ flex: 1, minWidth: 0 }} contentContainerStyle={{ gap: 16, padding: 3, paddingBottom: 28, width: "100%", maxWidth: 720 }}>
       <View style={{ alignItems: "flex-start" }}>{button("Back to library", onBack)}</View>
       <Text style={{ ...text, fontSize: 20, fontWeight: "600" }}>Import prompts</Text>
-      <Text style={muted}>Copy Markdown files into this library with a first saved version. Folders include their subfolders. Existing names are skipped; source files stay in place.</Text>
+      <Text style={muted}>Copy Markdown files into this library with a first saved version. Folder imports preserve their folder and subfolder structure. Existing paths are skipped; source files stay in place.</Text>
+      <View style={{ gap: 8, minWidth: 0 }}>
+        <Text style={text}>Import into folder</Text>
+        <FolderBreadcrumb folder={folder} colors={colors} />
+        <FolderPicker folders={folders} selected={folder} onSelect={(value) => setFolder(value ?? "")} colors={colors} disabled={busy} />
+      </View>
       {canPickFiles() && <View style={{ gap: 10 }}>
         <Text style={text}>From this device</Text>
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
@@ -58,11 +67,11 @@ export function ImportPrompts({ theme, busy, run, onImported, onBack }: Props) {
       </View>}
       <View style={{ gap: 10 }}>
         <Text style={text}>Files or folders on the Paseo host</Text>
-        <TextInput accessibilityLabel="Markdown file or folder paths" value={paths} onChangeText={setPaths} editable={!busy} multiline autoCapitalize="none" autoCorrect={false} textAlignVertical="top" placeholder={"~/prompts\n/home/user/code-review.md"} placeholderTextColor={colors.foregroundMuted} style={{ ...text, minHeight: 120, padding: 12, backgroundColor: colors.surface2, borderColor: colors.border, borderWidth: 1, borderRadius: 8 }} />
+        <TextInput accessibilityLabel="Markdown file or folder paths" value={paths} onChangeText={setPaths} editable={!busy} multiline autoCapitalize="none" autoCorrect={false} textAlignVertical="top" placeholder={"~/prompts\n/home/user/code-review.md"} placeholderTextColor={colors.foregroundMuted} style={{ ...text, width: "100%", minWidth: 0, minHeight: 120, padding: 12, backgroundColor: colors.surface2, borderColor: colors.border, borderWidth: 1, borderRadius: 8 }} />
         <Text style={muted}>One absolute path per line. Up to 100 Markdown files and 8 MB per import. Hidden entries, symbolic links, and version-history folders are skipped.</Text>
         <View style={{ alignItems: "flex-start" }}>{button("Import paths", () => run(async () => {
           setResult(null);
-          setResult(await importRpc({ paths: sources, files: [] }));
+          setResult(await importRpc({ paths: sources, files: [], folder }));
           await onImported();
         }), !sources.length || sources.length > 100)}</View>
       </View>

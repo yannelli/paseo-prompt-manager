@@ -8,6 +8,8 @@ export default function contribute(server: PluginServerContext) {
   server.handle(rpc.getSettings, () => library.settings());
   server.handle(rpc.saveSettings, (input) => library.configure(input));
   server.handle(rpc.listPrompts, (input) => library.list(input));
+  server.handle(rpc.listFolders, () => library.folders());
+  server.handle(rpc.createFolder, ({ path }) => library.createFolder(path));
   server.handle(rpc.readPrompt, ({ id }) => library.read(id));
   server.handle(rpc.savePrompt, (input) => library.save(input));
   server.handle(rpc.importPrompts, (input) => library.import(input));

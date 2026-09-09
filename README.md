@@ -27,6 +27,12 @@ Attachment search matches multiple words across the title, filename, and content
 
 Choose **New prompt**, enter a filename and Markdown content, then save. The first Markdown heading becomes the title. Files keep their normalized names when you edit their content.
 
+Add a **Description** and comma-separated **Labels / tags** to explain and categorize a prompt. Search includes both fields; **Folders & tags** filters the library by folder or tag.
+
+Folders and subfolders are directories inside the library. Create them from **Folders & tags** or the editor's **Folder** controls. Selecting another folder and saving moves the prompt and retains its version history. Nested prompts use paths such as `/prompt engineering/security/code-review`.
+
+Choose **Expand editor** to use the available workspace, and **Preview Markdown** to switch between editing and a formatted preview. **Collapse editor** returns to the library layout.
+
 By default, the library lives at `~/.config/paseo/prompt-lib/`:
 
 ```text
@@ -40,6 +46,8 @@ prompt-lib/
 
 Each save creates a full Markdown snapshot. **Version history** lets you inspect and restore a snapshot as a new version. **Archive** removes the current prompt and retains its history; use **Include archived** to find and restore it.
 
+Descriptions and tags use a `paseo` JSON field in Markdown frontmatter and are included in snapshots. Agents receive the prompt body. Nested history follows `versions/<folder>/<prompt-name>/<prompt-name>.<timestamp>_v<number>.md`; existing flat prompts keep their paths.
+
 You can also edit files with your own editor. Saving a stale draft in the plugin rejects the write so you can reload the changed file. The plugin preserves externally edited content before replacing or archiving it.
 
 ## Import Markdown files and folders
@@ -49,7 +57,7 @@ Open **Prompts → Import**.
 - In a browser client, use **Choose Markdown files** or **Choose folder** to import from your device.
 - On any client, enter absolute paths or `~/` paths under **Files or folders on the Paseo host**, one per line, then choose **Import paths**.
 
-Folders include subfolders. Imports copy `.md` files into the library and create their first versions. Filenames become normalized basenames; folder structure is flattened. Existing names, including archived prompts, are skipped and reported. Source files stay in place.
+Folders include subfolders. Choose an import destination to copy `.md` files into that folder and create their first versions. Folder imports preserve the selected folder and its subfolders with normalized names. Existing paths, including archived prompts, are skipped and reported. Source files stay in place.
 
 Each import supports up to 100 Markdown files totaling 8 MB, with a 512 KB limit per file. Hidden entries, symbolic links, and `versions` folders are excluded. Host folder scans stop at 5,000 entries.
 
