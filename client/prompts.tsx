@@ -1,11 +1,16 @@
 import type { PluginAgentPanelProps, PluginSurfaceProps } from "@getpaseo/plugin/client";
 import { usePaseo, useRpc } from "@getpaseo/plugin/client";
+import { Icon, ScrollView, TextInput, useToast } from "@getpaseo/plugin/client/react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { MarkdownPreview } from "./markdown";
 import { FolderPicker, FolderBreadcrumb } from "./editor";
+import { VersionHistory } from "./history";
 import { ImportPrompts } from "./import";
+import { LibrarySettingsScreen } from "./settings";
+import { LibrarySidebar } from "./sidebar";
+import { Banner, Button, Card, Chip, ConfirmModal, EmptyState, Field, IconButton, Meta, Segmented, StatusDot, Tip, inputStyle, radius, relativeTime, row, wordCount } from "./ui";
 import {
   archivePrompt, createFolder, listFolders, getGitStatus, getSettings, initGit, listPrompts, listVersions,
   readPrompt, readVersion, restoreVersion, savePrompt, saveSettings, syncGit,
@@ -13,33 +18,6 @@ import {
 } from "../shared/prompts";
 
 type Props = PluginSurfaceProps & { agentId?: string };
-type ButtonProps = {
-  title: string;
-  onPress: () => void;
-  colors: PluginSurfaceProps["theme"]["colors"];
-  disabled?: boolean;
-  primary?: boolean;
-  destructive?: boolean;
-};
-
-function Button({ title, onPress, colors, disabled, primary, destructive }: ButtonProps) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={title}
-      accessibilityState={{ disabled: Boolean(disabled) }}
-      disabled={disabled}
-      onPress={onPress}
-      style={({ pressed }) => ({
-        paddingVertical: 10, paddingHorizontal: 14, borderRadius: 8,
-        backgroundColor: primary ? colors.accent : colors.surface2,
-        opacity: disabled ? 0.45 : pressed ? 0.75 : 1,
-      })}
-    >
-      <Text style={{ color: primary ? colors.accentForeground : destructive ? colors.statusDanger : colors.foreground, fontWeight: "600", fontSize: 13 }}>{title}</Text>
-    </Pressable>
-  );
-}
 
 export function PromptPanel(props: PluginAgentPanelProps) {
   return <PromptLibrary {...props} />;
@@ -48,6 +26,7 @@ export function PromptPanel(props: PluginAgentPanelProps) {
 export function PromptLibrary({ theme, layout, agentId }: Props) {
   const colors = theme.colors;
   const paseo = usePaseo();
+  const toast = useToast();
   const cache = useQueryClient();
   const settingsRpc = useRpc(getSettings);
   const configureRpc = useRpc(saveSettings);
@@ -77,7 +56,8 @@ export function PromptLibrary({ theme, layout, agentId }: Props) {
   const [newFolder, setNewFolder] = useState("");
   const [organize, setOrganize] = useState(false);
   const [expanded, setExpanded] = useState(false);
-  const [markdownPreview, setMarkdownPreview] = useState(false);
+  const [details, setDetails] = useState(true);
+  const [view, setView] = useState<"edit" | "preview">("edit");
   const [history, setHistory] = useState(false);
   const [version, setVersion] = useState<string | null>(null);
   const [directory, setDirectory] = useState("");
@@ -85,7 +65,6 @@ export function PromptLibrary({ theme, layout, agentId }: Props) {
   const [remote, setRemote] = useState("");
   const [pending, setPending] = useState<(() => void) | null>(null);
   const [archiveConfirm, setArchiveConfirm] = useState(false);
-  const [notice, setNotice] = useState("");
   const operationLock = useRef(false);
 
   const settings = useQuery({ queryKey: ["prompt-settings"], queryFn: () => settingsRpc({}) });
@@ -101,7 +80,7 @@ export function PromptLibrary({ theme, layout, agentId }: Props) {
     queryKey: ["prompt-versions", root, current?.id],
     queryFn: () => versionsRpc({ id: current!.id }), enabled: history && Boolean(current),
   });
-  const preview = useQuery({
+  const snapshot = useQuery({
     queryKey: ["prompt-version", root, current?.id, version],
     queryFn: () => versionRpc({ id: current!.id, filename: version! }),
     enabled: Boolean(current && version && history),
@@ -112,7 +91,6 @@ export function PromptLibrary({ theme, layout, agentId }: Props) {
   });
   const mutation = useMutation({
     mutationFn: async (action: () => Promise<void>) => { await action(); },
-    onError: () => setNotice(""),
     onSettled: () => { operationLock.current = false; },
   });
   const busy = mutation.isPending;
@@ -122,10 +100,11 @@ export function PromptLibrary({ theme, layout, agentId }: Props) {
   const configDirty = mode === "settings" && Boolean(settings.data) &&
     (directory !== settings.data?.directory || gitEnabled !== settings.data?.gitEnabled);
   const dirty = draftDirty || configDirty;
+  const locked = busy || Boolean(pending);
+  const readOnly = locked || Boolean(current?.archived);
   const run = (action: () => Promise<void>) => {
     if (operationLock.current) return;
     operationLock.current = true;
-    setNotice("");
     mutation.mutate(action);
   };
   const guard = (action: () => void) => {
@@ -141,6 +120,8 @@ export function PromptLibrary({ theme, layout, agentId }: Props) {
     setTagsText(prompt?.tags.join(", ") ?? "");
     setFolder(prompt?.folder ?? filterFolder ?? "");
     setOrganize(false);
+    setDetails(!prompt);
+    setView("edit");
     setVersion(null);
     setHistory(false);
     setArchiveConfirm(false);
@@ -154,250 +135,323 @@ export function PromptLibrary({ theme, layout, agentId }: Props) {
       cache.invalidateQueries({ queryKey: ["prompt-git"] }),
     ]);
   };
-  const error = mutation.error ?? settings.error ?? folders.error ?? tagSources.error ?? prompts.error ?? versions.error ?? preview.error ?? git.error;
-  const text = { color: colors.foreground };
-  const muted = { color: colors.foregroundMuted, fontSize: 12 };
-  const input = {
-    color: colors.foreground, backgroundColor: colors.surface2, borderColor: colors.border,
-    width: "100%" as const, minWidth: 0, borderWidth: 1, borderRadius: 8, padding: 12, fontSize: 14,
-  };
-  const row = { flexDirection: "row" as const, flexWrap: "wrap" as const, gap: 8, alignItems: "center" as const };
-  const button = (title: string, onPress: () => void, options: Partial<ButtonProps> = {}) =>
-    <Button title={title} onPress={onPress} colors={colors} disabled={busy || Boolean(pending)} {...options} />;
-
+  const success = (message: string) => toast.show(message, { variant: "success" });
+  const queryError = settings.error ?? folders.error ?? tagSources.error ?? prompts.error ?? versions.error ?? snapshot.error ?? git.error;
+  const describe = (error: unknown) => error instanceof Error ? error.message : String(error);
+  const openSettings = () => guard(() => {
+    setDirectory(settings.data?.directory ?? "");
+    setGitEnabled(settings.data?.gitEnabled ?? false);
+    setRemote("");
+    setMode("settings");
+  });
+  const openPrompt = (id: string) => guard(() => run(async () => accept(await readRpc({ id }))));
+  const createFolderAt = (parent: string, assign: (path: string) => void) => run(async () => {
+    const created = await createFolderRpc({ path: [parent, newFolder.trim()].filter(Boolean).join("/") });
+    setNewFolder("");
+    assign(created.path);
+    await refresh();
+    success(`Folder "${created.path}" created.`);
+  });
   const save = () => run(async () => {
     const saved = await saveRpc({ id: current?.id, name: current ? current.id.split("/").at(-1)! : name, content, revision: current?.revision ?? null, description, tags, folder });
     accept(saved);
+    setDetails(false);
     await refresh();
-    setNotice("Prompt saved with a new local version.");
+    success(`Saved ${saved.id}.md as a new version.`);
   });
-  const saveDisabled = busy || Boolean(pending) || !draftDirty || !name.trim() || !content.trim() || Boolean(current?.archived);
+  const restore = (filename: string) => guard(() => run(async () => {
+    const restored = await restoreRpc({ id: current!.id, filename, revision: current!.revision });
+    accept(restored);
+    setDetails(false);
+    await refresh();
+    success(current?.archived ? "Prompt restored from the archive." : "Version restored as a new revision.");
+  }));
+  const restoreArchived = () => run(async () => {
+    const list = await versionsRpc({ id: current!.id });
+    const latest = list[0];
+    if (!latest) throw new Error("This prompt has no saved versions to restore.");
+    const restored = await restoreRpc({ id: current!.id, filename: latest.filename, revision: null });
+    accept(restored);
+    setDetails(false);
+    await refresh();
+    success("Prompt restored from the archive.");
+  });
+  const sendToAgent = () => run(async () => {
+    const saved = await readRpc({ id: current!.id });
+    if (saved.archived) throw new Error("This prompt is archived. Restore it before sending.");
+    await paseo.agents.ref(agentId!).send(saved.content);
+    success("Prompt sent to this agent.");
+  });
+  const saveDisabled = locked || !draftDirty || !name.trim() || !content.trim() || Boolean(current?.archived);
   const fullEditor = mode === "editor" && expanded;
+  const showSidebar = !fullEditor && (!layout.compact || mode === "list");
+  const showMain = !layout.compact || mode === "editor";
+  const status = draftDirty ? { label: "Unsaved changes", color: colors.statusWarning } : current?.archived ? { label: "Archived", color: colors.foregroundMuted } : current ? { label: "Saved", color: colors.statusSuccess } : { label: "Draft", color: colors.foregroundMuted };
+  const text = { color: colors.foreground };
+  const muted = { color: colors.foregroundMuted, fontSize: 12 };
+  const input = inputStyle(colors);
+  const padding = fullEditor ? 10 : layout.compact ? 12 : 20;
+
+  const detailsSummary = [folder ? folder : "Library root", tags.length ? `${tags.length} tag${tags.length === 1 ? "" : "s"}` : "no tags", description.trim() ? "described" : "no description"].join(" · ");
+
+  const detailsPanel = (
+    <Card colors={colors} style={{ padding: 0, gap: 0 }}>
+      <Pressable accessibilityRole="button" accessibilityLabel={details ? "Hide details" : "Show details"} accessibilityState={{ expanded: details }} onPress={() => setDetails(!details)} style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 9, paddingHorizontal: 12 }}>
+        <Icon name={details ? "ChevronDown" : "ChevronRight"} size={15} color={colors.foregroundMuted} />
+        <Text style={{ ...text, fontSize: 13, fontWeight: "600" }}>Details</Text>
+        <Text numberOfLines={1} style={{ ...muted, flex: 1, minWidth: 0 }}>{detailsSummary}</Text>
+      </Pressable>
+      {details && (
+        <ScrollView keyboardShouldPersistTaps="handled" style={{ flexGrow: 0, flexShrink: 1, maxHeight: layout.compact ? 240 : 320, minWidth: 0, borderTopWidth: 1, borderColor: colors.border }} contentContainerStyle={{ gap: 12, padding: 12 }}>
+          {!current && (
+            <Field label="Filename" hint="Lowercase letters, numbers, and dashes. The first Markdown heading becomes the title." colors={colors}>
+              <TextInput accessibilityLabel="Prompt filename" value={name} onChangeText={setName} editable={!locked} autoCapitalize="none" autoCorrect={false} placeholder="code-review" placeholderTextColor={colors.foregroundMuted} style={{ ...input, backgroundColor: colors.surface0, fontFamily: "monospace", fontSize: 13 }} />
+            </Field>
+          )}
+          <Field label="Description" hint="Shown in the library and searchable. Explain when to use this prompt." colors={colors}>
+            <TextInput accessibilityLabel="Prompt description" value={description} onChangeText={setDescription} editable={!readOnly} maxLength={2000} multiline placeholder="When to use this prompt" placeholderTextColor={colors.foregroundMuted} style={{ ...input, backgroundColor: colors.surface0, minHeight: 60 }} />
+          </Field>
+          <Field label="Tags" hint="Separate tags with commas." colors={colors}>
+            <TextInput accessibilityLabel="Prompt tags" value={tagsText} onChangeText={setTagsText} editable={!readOnly} autoCapitalize="none" autoCorrect={false} placeholder="review, coding, writing" placeholderTextColor={colors.foregroundMuted} style={{ ...input, backgroundColor: colors.surface0 }} />
+            {tags.length > 0 && <View style={{ ...row, gap: 6 }}>{tags.map((tag) => <Chip key={tag} icon="Hash" label={tag} active colors={colors} disabled={readOnly} onClear={() => setTagsText(tags.filter((value) => value !== tag).join(", "))} />)}</View>}
+          </Field>
+          <Field label="Folder" colors={colors} trailing={<FolderBreadcrumb folder={folder} colors={colors} />}>
+            <FolderPicker folders={folders.data ?? []} selected={folder} onSelect={(value) => setFolder(value ?? "")} colors={colors} disabled={readOnly} maxHeight={150} />
+            {!current?.archived && (
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                <TextInput accessibilityLabel="Create editor subfolder" value={newFolder} onChangeText={setNewFolder} editable={!locked} placeholder={folder ? `New subfolder in ${folder.split("/").at(-1)}` : "New folder or nested/path"} placeholderTextColor={colors.foregroundMuted} autoCapitalize="none" autoCorrect={false} onSubmitEditing={() => newFolder.trim() && createFolderAt(folder, setFolder)} style={{ ...input, backgroundColor: colors.surface0, flex: 1, width: undefined, paddingVertical: 8, fontSize: 13 }} />
+                <IconButton icon="FolderPlus" label="Create folder" onPress={() => createFolderAt(folder, setFolder)} colors={colors} disabled={locked || !newFolder.trim()} />
+              </View>
+            )}
+          </Field>
+        </ScrollView>
+      )}
+    </Card>
+  );
+
+  const historyPanel = current && history && (
+    <VersionHistory
+      theme={theme}
+      versions={versions.data}
+      loading={versions.isLoading}
+      selected={version}
+      onSelect={setVersion}
+      snapshot={snapshot.data}
+      snapshotLoading={snapshot.isLoading}
+      onRestore={() => version && restore(version)}
+      onClose={() => { setHistory(false); setVersion(null); }}
+      disabled={locked}
+      archived={current.archived}
+    />
+  );
+
+  const editor = (
+    <View style={{ flex: 1, minHeight: 0, minWidth: 0, gap: 10 }}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+        {(layout.compact || expanded) && <IconButton icon="ArrowLeft" label="Back to library" onPress={() => guard(() => { setExpanded(false); setMode("list"); })} colors={colors} disabled={busy} />}
+        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+          <Text numberOfLines={1} style={{ ...text, fontSize: 18, fontWeight: "700" }}>{current ? current.title : name.trim() || "New prompt"}</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6, minWidth: 0 }}>
+            <StatusDot color={status.color} />
+            <Text style={muted}>{status.label}</Text>
+            {current && <Text numberOfLines={1} style={{ ...muted, flexShrink: 1 }}>· {current.id}.md · {relativeTime(current.updatedAt)}</Text>}
+          </View>
+        </View>
+        <Segmented options={[{ value: "edit", label: "Edit", icon: "Pencil" }, { value: "preview", label: "Preview", icon: "Eye" }]} value={view} onChange={setView} colors={colors} />
+        <IconButton icon={expanded ? "Minimize2" : "Maximize2"} label={expanded ? "Collapse editor" : "Expand editor"} onPress={() => setExpanded(!expanded)} colors={colors} active={expanded} />
+      </View>
+      <View style={{ ...row, gap: 6 }}>
+        <Button title={draftDirty ? "Save" : "Saved"} icon={draftDirty ? "Save" : "Check"} variant="primary" onPress={save} colors={colors} disabled={saveDisabled} accessibilityLabel="Save prompt" />
+        {draftDirty && <Button title="Discard" icon="RotateCcw" variant="ghost" onPress={() => guard(() => accept(current))} colors={colors} disabled={locked} accessibilityLabel="Discard draft" />}
+        {current && <Button title="History" icon="History" variant="ghost" active={history} onPress={() => { setHistory(!history); setVersion(null); }} colors={colors} disabled={locked} accessibilityLabel={history ? "Hide history" : "Version history"} />}
+        {agentId && current && !current.archived && <Button title="Send to agent" icon="Send" onPress={sendToAgent} colors={colors} disabled={locked || draftDirty} accessibilityLabel="Send saved prompt to agent" />}
+        <View style={{ flex: 1 }} />
+        {current && !current.archived && <IconButton icon="Archive" label="Archive prompt" tone="danger" onPress={() => guard(() => setArchiveConfirm(true))} colors={colors} disabled={locked} />}
+      </View>
+      {current?.archived && <Banner tone="warning" colors={colors} message="This prompt is archived. Restore it to edit or send it." action={<Button title="Restore" icon="ArchiveRestore" size="sm" onPress={restoreArchived} colors={colors} disabled={locked} />} />}
+      {agentId && current && draftDirty && !current.archived && <Meta colors={colors} icon="Info">Save your changes before sending this prompt to the agent.</Meta>}
+      {expanded && !current && <TextInput accessibilityLabel="Prompt filename" value={name} onChangeText={setName} editable={!locked} autoCapitalize="none" autoCorrect={false} placeholder="Filename, for example code-review" placeholderTextColor={colors.foregroundMuted} style={{ ...input, fontFamily: "monospace", fontSize: 13 }} />}
+      {!expanded && detailsPanel}
+      <View style={{ flex: 1, minHeight: expanded ? 0 : 160, minWidth: 0, flexDirection: layout.compact ? "column" : "row", gap: 10 }}>
+        <View style={{ flex: 1, minHeight: 0, minWidth: 0, gap: 6 }}>
+          {view === "preview" ? (
+            <ScrollView keyboardShouldPersistTaps="handled" style={{ flex: 1, minWidth: 0, borderWidth: 1, borderColor: colors.border, borderRadius: radius, backgroundColor: colors.surface1 }} contentContainerStyle={{ padding: 16, minWidth: 0 }}>
+              <MarkdownPreview content={content} theme={theme} />
+            </ScrollView>
+          ) : (
+            <TextInput accessibilityLabel="Prompt Markdown" value={content} onChangeText={setContent} editable={!readOnly} multiline textAlignVertical="top" autoCapitalize="none" autoCorrect={false} placeholder={"# Title\n\nWrite your prompt in Markdown…"} placeholderTextColor={colors.foregroundMuted} style={{ ...input, flex: 1, minHeight: 0, padding: 14, fontFamily: "monospace", fontSize: 13, lineHeight: 21 }} />
+          )}
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, paddingHorizontal: 2 }}>
+            <Text style={{ ...muted, fontSize: 11 }}>{wordCount(content)} words · {content.length} characters</Text>
+            {!content.trim() && <Text style={{ ...muted, fontSize: 11 }}>Content is required to save</Text>}
+          </View>
+        </View>
+        {historyPanel && <View style={{ width: layout.compact ? undefined : 320, minWidth: 0, minHeight: 0, maxHeight: layout.compact ? 320 : undefined, flexShrink: layout.compact ? 0 : undefined }}>{historyPanel}</View>}
+      </View>
+    </View>
+  );
+
+  const welcome = (
+    <ScrollView keyboardShouldPersistTaps="handled" style={{ flex: 1, minWidth: 0 }} contentContainerStyle={{ flexGrow: 1, justifyContent: "center", alignItems: "center", gap: 18, paddingVertical: 24 }}>
+      <EmptyState
+        icon="NotebookPen"
+        title={prompts.data?.length ? "Select a prompt" : "Your library is empty"}
+        body={prompts.data?.length ? "Open a prompt from the list to edit its Markdown, manage tags and folders, and browse saved versions." : "Save the instructions you keep repeating. Prompts are Markdown files on this host, versioned on every save."}
+        colors={colors}
+      >
+        <Button title="New prompt" icon="Plus" variant="primary" onPress={() => guard(() => accept(null))} colors={colors} disabled={locked} />
+        <Button title="Import Markdown" icon="Upload" onPress={() => guard(() => setMode("import"))} colors={colors} disabled={locked || !settings.data} />
+      </EmptyState>
+      <Card colors={colors} style={{ width: "100%", maxWidth: 520, gap: 12 }}>
+        <Tip icon="Paperclip" colors={colors}>Attach a prompt to any message from the composer's attachment menu under Saved prompt.</Tip>
+        <Tip icon="SquareSlash" colors={colors}>Type /prompt code-review in an agent composer to send that prompt and start a turn.</Tip>
+        <Tip icon="GitBranch" colors={colors}>Turn on Git sync in Settings to back up prompts and their history to a repository.</Tip>
+      </Card>
+    </ScrollView>
+  );
 
   return (
-    <View style={{ flex: 1, minHeight: 0, minWidth: 0, backgroundColor: colors.surface0, padding: fullEditor ? 10 : layout.compact ? 14 : 24, gap: 14 }}>
-      {!fullEditor && <View style={{ ...row, justifyContent: "space-between" }}>
-        <View style={{ gap: 4, flexShrink: 1 }}>
-          <Text style={{ ...text, fontSize: layout.compact ? 22 : 28, fontWeight: "700" }}>Prompt library</Text>
-          <Text style={muted}>{agentId ? "Save your instructions. Send them to this agent." : "Markdown prompts, shared across your agents on this host."}</Text>
-        </View>
-        <View style={row}>
-          {button("New prompt", () => guard(() => accept(null)), { primary: true })}
-          {button("Import", () => guard(() => setMode("import")), { disabled: busy || Boolean(pending) || !settings.data })}
-          {button("Settings", () => guard(() => {
-            setDirectory(settings.data?.directory ?? "");
-            setGitEnabled(settings.data?.gitEnabled ?? false);
-            setRemote("");
-            setMode("settings");
-          }), { disabled: busy || Boolean(pending) || !settings.data })}
-        </View>
-      </View>}
-      {pending && <View style={{ padding: 14, borderRadius: 8, backgroundColor: colors.surface1, gap: 10 }}>
-        <Text style={text}>You have unsaved changes. Discard them to continue?</Text>
-        <View style={row}>
-          <Button title="Keep editing" colors={colors} onPress={() => setPending(null)} />
-          <Button title="Discard changes" destructive colors={colors} onPress={() => {
-            const action = pending;
-            setPending(null);
-            setName(current?.title ?? "");
-            setContent(current?.content ?? "");
-            setDescription(current?.description ?? "");
-            setTagsText(current?.tags.join(", ") ?? "");
-            setFolder(current?.folder ?? filterFolder ?? "");
-            setDirectory(settings.data?.directory ?? "");
-            setGitEnabled(settings.data?.gitEnabled ?? false);
-            action();
-          }} />
-        </View>
-      </View>}
-      {error && <Text accessibilityRole="alert" style={{ color: colors.statusDanger }}>{error instanceof Error ? error.message : String(error)}</Text>}
-      {notice !== "" && <Text accessibilityRole="alert" style={{ color: colors.statusSuccess }}>{notice}</Text>}
-      {busy && <Text style={muted}>Working…</Text>}
-      {mode === "import" ? <ImportPrompts theme={theme} busy={busy || Boolean(pending)} run={run} onImported={refresh} onBack={() => setMode(current ? "editor" : "list")} folders={folders.data ?? []} initialFolder={filterFolder ?? ""} /> : mode === "settings" ? (
-        <ScrollView keyboardShouldPersistTaps="handled" style={{ flex: 1, minWidth: 0 }} contentContainerStyle={{ gap: 16, padding: 3, paddingBottom: 28, width: "100%", maxWidth: 720 }}>
-          <View style={row}>{button("Back to prompts", () => guard(() => setMode(current || draftDirty ? "editor" : "list")))}</View>
-          <Text style={{ ...text, fontSize: 20, fontWeight: "600" }}>Library settings</Text>
-          <View style={{ gap: 7 }}>
-            <Text style={text}>Directory on this host</Text>
-            <TextInput accessibilityLabel="Prompt library directory" value={directory} onChangeText={setDirectory} editable={!busy && !pending} autoCapitalize="none" autoCorrect={false} placeholder="~/.config/paseo/prompt-lib" placeholderTextColor={colors.foregroundMuted} style={input} />
-            <Text style={muted}>Changing the directory opens a different library. Existing files stay in their directory.</Text>
-          </View>
-          <View style={row}>
-            {button(gitEnabled ? "Git sync: on" : "Git sync: off", () => setGitEnabled(!gitEnabled))}
-            {button("Save settings", () => run(async () => {
-              const result = await configureRpc({ directory, gitEnabled });
-              cache.setQueryData(["prompt-settings"], result);
-              setDirectory(result.directory);
-              setGitEnabled(result.gitEnabled);
-              setCurrent(null); setName(""); setContent(""); setDescription(""); setTagsText(""); setFolder(""); setFilterFolder(undefined); setFilterTag(undefined); setHistory(false); setVersion(null);
-              await refresh();
-              setNotice("Settings saved.");
-            }), { primary: true, disabled: busy || Boolean(pending) || !directory.trim() || !configDirty })}
-          </View>
-          {settings.data?.gitEnabled && <View style={{ gap: 12, borderTopWidth: 1, borderColor: colors.border, paddingTop: 18 }}>
-            <Text style={{ ...text, fontSize: 18, fontWeight: "600" }}>Git sync</Text>
-            <Text style={muted}>Sync runs when you press Sync now. It commits library changes, pulls, and pushes using this host’s Git credentials.</Text>
-            {git.isLoading && <Text style={muted}>Reading repository…</Text>}
-            {git.data && <>
-              <Text style={text}>{git.data.message}</Text>
-              {git.data.initialized && <Text style={muted}>{git.data.branch || "No branch"} · {git.data.changes} changed files{"\n"}{git.data.remote || "No remote configured"}</Text>}
-              {(!git.data.initialized || !git.data.remote) && <>
-                <TextInput accessibilityLabel="Git remote URL" value={remote} onChangeText={setRemote} editable={!busy && !configDirty && !pending} autoCapitalize="none" autoCorrect={false} placeholder="Git remote URL (optional)" placeholderTextColor={colors.foregroundMuted} style={input} />
-                <View style={row}>{button(git.data.initialized ? "Set remote" : "Initialize Git", () => run(async () => {
-                  const result = await initRpc({ remote });
-                  cache.setQueryData(["prompt-git", root], result);
-                  setNotice(result.message);
-                }), { disabled: busy || Boolean(pending) || configDirty || (git.data.initialized && !remote.trim()) })}</View>
-              </>}
-              {git.data.initialized && <View style={row}>{button("Sync now", () => run(async () => {
-                const result = await syncRpc({});
-                cache.setQueryData(["prompt-git", root], result);
-                await refresh();
-                setNotice(result.message);
-              }), { primary: true, disabled: busy || Boolean(pending) || configDirty })}</View>}
-            </>}
-          </View>}
-        </ScrollView>
-      ) : (
-        <View style={{ flex: 1, minHeight: 0, minWidth: 0, flexDirection: layout.compact ? "column" : "row", gap: 22 }}>
-          {!fullEditor && (!layout.compact || mode === "list") && <View style={{ width: layout.compact ? undefined : 270, minWidth: 0, minHeight: 0, flex: layout.compact ? 1 : undefined, gap: 10, paddingHorizontal: 3 }}>
-            <TextInput accessibilityLabel="Search prompts" value={query} onChangeText={setQuery} placeholder="Search prompts, tags, descriptions…" placeholderTextColor={colors.foregroundMuted} style={input} />
-            <View style={row}>
-              {button(archived ? "Hide archived" : "Include archived", () => setArchived(!archived))}
-              {button("Refresh", () => guard(() => run(async () => {
-                if (current) accept(await readRpc({ id: current.id }));
-                await refresh();
-              })))}
+    <View style={{ flex: 1, minHeight: 0, minWidth: 0, backgroundColor: colors.surface0, padding, gap: 12 }}>
+      {!fullEditor && (
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flexShrink: 1, minWidth: 0 }}>
+            <View style={{ width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface1, borderWidth: 1, borderColor: colors.border }}>
+              <Icon name="NotebookPen" size={18} color={colors.accent} />
             </View>
-            <View style={{ gap: 6 }}>
-              <View style={{ ...row, justifyContent: "space-between" }}>
-                <Text style={muted}>{filterFolder === undefined ? "All folders" : `Library / ${filterFolder || "Root"}`}{filterTag ? ` · #${filterTag}` : ""}</Text>
-                {button(organize ? "Hide filters" : "Folders & tags", () => setOrganize(!organize))}
-              </View>
-              {organize && <View style={{ gap: 8 }}>
-                <FolderPicker folders={folders.data ?? []} selected={filterFolder} onSelect={setFilterFolder} colors={colors} disabled={busy || Boolean(pending)} allowAll />
-                <TextInput accessibilityLabel="New folder or subfolder" value={newFolder} onChangeText={setNewFolder} editable={!busy && !pending} placeholder="Folder or parent/subfolder" placeholderTextColor={colors.foregroundMuted} autoCapitalize="none" style={input} />
-                <View style={row}>{button("Create folder", () => run(async () => {
-                  const created = await createFolderRpc({ path: [filterFolder, newFolder.trim()].filter(Boolean).join("/") });
-                  setNewFolder(""); setFilterFolder(created.path); await refresh();
-                }), { disabled: busy || Boolean(pending) || !newFolder.trim() })}</View>
-                <Text style={muted}>Created inside {filterFolder || "Library root"}. Use / for subfolders.</Text>
-                <ScrollView style={{ maxHeight: 108, flexGrow: 0 }} contentContainerStyle={{ ...row, padding: 3 }}>
-                  {filterTag && button("Clear tag", () => setFilterTag(undefined))}
-                  {availableTags.map((tag) => <Button key={tag} title={`#${tag}`} colors={colors} primary={filterTag === tag} disabled={busy || Boolean(pending)} onPress={() => setFilterTag(filterTag === tag ? undefined : tag)} />)}
-                </ScrollView>
-              </View>}
+            <View style={{ minWidth: 0, flexShrink: 1 }}>
+              <Text style={{ ...text, fontSize: layout.compact ? 18 : 22, fontWeight: "700" }}>Prompts</Text>
+              <Text numberOfLines={1} style={muted}>{agentId ? "Save instructions and send them to this agent." : "Markdown prompts shared across agents on this host."}</Text>
             </View>
-            {prompts.isLoading && <Text style={muted}>Loading prompts…</Text>}
-            <ScrollView keyboardShouldPersistTaps="handled" style={{ flex: 1, minHeight: 0, minWidth: 0 }} contentContainerStyle={{ gap: 6, padding: 3, paddingBottom: 18 }}>
-              {prompts.data?.map((prompt) => <Pressable key={prompt.id} accessibilityRole="button" accessibilityLabel={`Open ${prompt.title}`} accessibilityState={{ selected: current?.id === prompt.id }} disabled={busy || Boolean(pending)} onPress={() => guard(() => run(async () => accept(await readRpc({ id: prompt.id }))))} style={{ padding: 14, borderRadius: 8, gap: 6, borderLeftWidth: 3, borderLeftColor: current?.id === prompt.id ? colors.accent : colors.surface0, backgroundColor: current?.id === prompt.id ? colors.surface2 : colors.surface1 }}>
-                <Text numberOfLines={2} style={{ ...text, fontWeight: "600" }}>{prompt.title}</Text>
-                {prompt.description !== "" && <Text numberOfLines={2} style={muted}>{prompt.description}</Text>}
-                {prompt.tags.length > 0 && <Text numberOfLines={1} style={{ ...muted, color: colors.accent }}>{prompt.tags.map((tag) => `#${tag}`).join("  ")}</Text>}
-                <Text numberOfLines={1} style={muted}>{prompt.id}.md{prompt.archived ? " · Archived" : ""}</Text>
-              </Pressable>)}
-              {prompts.data?.length === 0 && <Text style={{ ...muted, paddingVertical: 20 }}>{query ? "No matching prompts." : "Create your first prompt or add Markdown files to your library directory."}</Text>}
-            </ScrollView>
-            <Text numberOfLines={2} style={muted}>{root}</Text>
-          </View>}
-          {(!layout.compact || mode === "editor") && <View style={{ flex: 1, minWidth: 0, minHeight: 0 }}>
-            {mode === "list" ? <View style={{ paddingTop: 30, gap: 10 }}>
-              <Text style={{ ...text, fontSize: 22, fontWeight: "600" }}>Instructions worth keeping</Text>
-              <Text style={muted}>Choose a prompt to edit its Markdown and browse saved versions.</Text>
-              <Text style={muted}>In any composer, open attachments and choose Saved prompt to include a prompt with your message.</Text>
-            </View> : <View style={{ flex: 1, minHeight: 0, minWidth: 0, gap: 10, paddingHorizontal: 3 }}>
-              <View style={{ ...row, justifyContent: "space-between" }}>
-                <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
-                  <Text numberOfLines={1} style={{ ...text, fontSize: 20, fontWeight: "600" }}>{current ? current.title : "New prompt"}</Text>
-                  <Text style={muted}>{draftDirty ? "Unsaved changes" : current?.archived ? "Archived" : current ? "Saved" : ""}</Text>
-                </View>
-                {button(expanded ? "Collapse editor" : "Expand editor", () => setExpanded(!expanded))}
-              </View>
-              <View style={row}>
-                {(layout.compact || expanded) && button("Back to library", () => guard(() => { setExpanded(false); setMode("list"); }))}
-                {button("Save prompt", save, { primary: true, disabled: saveDisabled })}
-                {button(markdownPreview ? "Edit Markdown" : "Preview Markdown", () => setMarkdownPreview(!markdownPreview))}
-                {draftDirty && button("Discard draft", () => guard(() => accept(current)))}
-              </View>
-              {expanded && !current && <TextInput accessibilityLabel="Prompt filename" value={name} onChangeText={setName} editable={!busy && !pending} placeholder="Filename, for example code-review" placeholderTextColor={colors.foregroundMuted} style={input} />}
-              {!expanded && <ScrollView keyboardShouldPersistTaps="handled" style={{ flexGrow: 0, flexShrink: 1, maxHeight: layout.compact ? 220 : 330, minWidth: 0 }} contentContainerStyle={{ gap: 12, padding: 3, paddingBottom: 8 }}>
-                {!current && <TextInput accessibilityLabel="Prompt filename" value={name} onChangeText={setName} editable={!busy && !pending} placeholder="Filename, for example code-review" placeholderTextColor={colors.foregroundMuted} style={input} />}
-                <Text style={muted}>The first Markdown heading becomes the prompt title.</Text>
-                <View style={{ gap: 6 }}>
-                  <Text style={text}>Description</Text>
-                  <TextInput accessibilityLabel="Prompt description" value={description} onChangeText={setDescription} editable={!busy && !current?.archived && !pending} maxLength={2000} multiline placeholder="When to use this prompt" placeholderTextColor={colors.foregroundMuted} style={{ ...input, minHeight: 66 }} />
-                </View>
-                <View style={{ gap: 6 }}>
-                  <Text style={text}>Labels / tags</Text>
-                  <TextInput accessibilityLabel="Prompt tags" value={tagsText} onChangeText={setTagsText} editable={!busy && !current?.archived && !pending} autoCapitalize="none" placeholder="review, coding, writing" placeholderTextColor={colors.foregroundMuted} style={input} />
-                  <Text style={muted}>Separate tags with commas.</Text>
-                  {tags.length > 0 && <View style={row}>{tags.map((tag) => <Button key={tag} title={`#${tag} ×`} colors={colors} disabled={busy || Boolean(pending) || Boolean(current?.archived)} onPress={() => setTagsText(tags.filter((value) => value !== tag).join(", "))} />)}</View>}
-                </View>
-                <View style={{ gap: 6 }}>
-                  <Text style={text}>Folder</Text>
-                  <FolderBreadcrumb folder={folder} colors={colors} />
-                  <FolderPicker folders={folders.data ?? []} selected={folder} onSelect={(value) => setFolder(value ?? "")} colors={colors} disabled={busy || Boolean(pending) || Boolean(current?.archived)} />
-                  {!current?.archived && <>
-                    <TextInput accessibilityLabel="Create editor subfolder" value={newFolder} onChangeText={setNewFolder} editable={!busy && !pending} placeholder="New folder or nested/path" placeholderTextColor={colors.foregroundMuted} autoCapitalize="none" style={input} />
-                    <View style={row}>{button("Create in selected folder", () => run(async () => {
-                      const created = await createFolderRpc({ path: [folder, newFolder.trim()].filter(Boolean).join("/") });
-                      setNewFolder(""); setFolder(created.path); await refresh();
-                    }), { disabled: busy || Boolean(pending) || !newFolder.trim() })}</View>
-                  </>}
-                </View>
-                {current && <Text style={muted}>{current.id}.md · Updated {new Date(current.updatedAt).toLocaleString()}</Text>}
-              </ScrollView>}
-              <View style={{ flex: 1, minHeight: expanded ? 0 : 140, minWidth: 0, padding: 3 }}>
-                {markdownPreview ? <ScrollView keyboardShouldPersistTaps="handled" style={{ flex: 1, minWidth: 0, borderWidth: 1, borderColor: colors.border, borderRadius: 8, backgroundColor: colors.surface1 }} contentContainerStyle={{ padding: 14, minWidth: 0 }}>
-                  <MarkdownPreview content={content} theme={theme} />
-                </ScrollView> : <TextInput accessibilityLabel="Prompt Markdown" value={content} onChangeText={setContent} editable={!busy && !current?.archived && !pending} multiline textAlignVertical="top" autoCapitalize="none" autoCorrect={false} placeholder="Write your prompt in Markdown…" placeholderTextColor={colors.foregroundMuted} style={{ ...input, flex: 1, minHeight: 0, fontFamily: "monospace", lineHeight: 21 }} />}
-              </View>
-              {!expanded && <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: history ? 260 : 140, flexGrow: 0, minWidth: 0 }} contentContainerStyle={{ gap: 14, padding: 3, paddingBottom: 12 }}>
-                <View style={row}>
-                  {current && button(history ? "Hide history" : "Version history", () => { setHistory(!history); setVersion(null); })}
-                  {current && !current.archived && button("Archive", () => guard(() => setArchiveConfirm(true)), { destructive: true })}
-                </View>
-              {archiveConfirm && current && <View style={{ gap: 10, padding: 14, borderRadius: 8, backgroundColor: colors.surface1 }}>
-                <Text style={text}>Archive “{current.title}”? Its versions remain available for restore.</Text>
-                <View style={row}>
-                  {button("Cancel", () => setArchiveConfirm(false))}
-                  {button("Confirm archive", () => run(async () => {
-                    await archiveRpc({ id: current.id, revision: current.revision });
-                    accept(null); setMode("list"); await refresh(); setNotice("Prompt archived.");
-                  }), { destructive: true })}
-                </View>
-              </View>}
-              {agentId && current && !current.archived && <View style={{ gap: 8, borderTopWidth: 1, borderColor: colors.border, paddingTop: 14 }}>
-                <View style={row}>{button("Send saved prompt to agent", () => run(async () => {
-                  const saved = await readRpc({ id: current.id });
-                  if (saved.archived) throw new Error("This prompt is archived. Restore it before sending.");
-                  await paseo.agents.ref(agentId).send(saved.content);
-                  setNotice("Prompt sent to this agent.");
-                }), { primary: true, disabled: busy || Boolean(pending) || draftDirty })}</View>
-                <Text style={muted}>{draftDirty ? "Save your changes before sending." : "Starts an agent turn with this prompt."}</Text>
-              </View>}
-              <Text style={muted}>To add a prompt to a draft, choose Saved prompt from the composer’s attachment menu.</Text>
-              {history && current && <View style={{ gap: 12, borderTopWidth: 1, borderColor: colors.border, paddingTop: 16 }}>
-                <Text style={{ ...text, fontSize: 18, fontWeight: "600" }}>Version history</Text>
-                {versions.isLoading && <Text style={muted}>Loading versions…</Text>}
-                {versions.data?.length === 0 && <Text style={muted}>No saved versions yet.</Text>}
-                <View style={row}>{versions.data?.map((item) => <Button key={item.filename} title={`v${item.version} · ${new Date(item.createdAt).toLocaleString()}`} colors={colors} primary={version === item.filename} disabled={busy || Boolean(pending)} onPress={() => setVersion(item.filename)} />)}</View>
-                {preview.isLoading && version && <Text style={muted}>Loading version…</Text>}
-                {version && preview.data && <>
-                  {preview.data.description !== "" && <Text style={muted}>{preview.data.description}</Text>}
-                  {preview.data.tags.length > 0 && <Text style={muted}>{preview.data.tags.map((tag) => `#${tag}`).join(" · ")}</Text>}
-                  <Text selectable style={{ ...text, fontFamily: "monospace", lineHeight: 21, padding: 14, backgroundColor: colors.surface1, borderRadius: 8 }}>{preview.data.content}</Text>
-                  <View style={row}>{button("Restore as new version", () => guard(() => run(async () => {
-                    const restored = await restoreRpc({ id: current.id, filename: version, revision: current.revision });
-                    accept(restored); await refresh(); setNotice("Version restored as a new revision.");
-                  })))}</View>
-                </>}
-              </View>}
-              </ScrollView>}
-            </View>}
-          </View>}
+          </View>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+            <Button title="New prompt" icon="Plus" variant="primary" onPress={() => guard(() => accept(null))} colors={colors} disabled={locked} />
+            {layout.compact
+              ? <IconButton icon="Upload" label="Import" onPress={() => guard(() => setMode("import"))} colors={colors} active={mode === "import"} disabled={locked || !settings.data} />
+              : <Button title="Import" icon="Upload" variant="ghost" active={mode === "import"} onPress={() => guard(() => setMode("import"))} colors={colors} disabled={locked || !settings.data} />}
+            <IconButton icon="Settings" label="Settings" onPress={openSettings} colors={colors} active={mode === "settings"} disabled={locked || !settings.data} />
+          </View>
         </View>
       )}
+      {queryError && <Banner tone="danger" colors={colors} message={describe(queryError)} />}
+      {mutation.error && <Banner tone="danger" colors={colors} message={describe(mutation.error)} onDismiss={() => mutation.reset()} />}
+      {busy && (
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+          <Icon name="LoaderCircle" size={13} color={colors.foregroundMuted} />
+          <Text style={muted}>Working…</Text>
+        </View>
+      )}
+      {mode === "import" ? (
+        <ImportPrompts theme={theme} busy={locked} run={run} onImported={refresh} onBack={() => setMode(current ? "editor" : "list")} folders={folders.data ?? []} initialFolder={filterFolder ?? ""} />
+      ) : mode === "settings" ? (
+        <LibrarySettingsScreen
+          colors={colors}
+          busy={locked}
+          settings={settings.data}
+          git={{ data: git.data, isLoading: git.isLoading }}
+          directory={directory}
+          setDirectory={setDirectory}
+          gitEnabled={gitEnabled}
+          setGitEnabled={setGitEnabled}
+          remote={remote}
+          setRemote={setRemote}
+          configDirty={configDirty}
+          onBack={() => guard(() => setMode(current || draftDirty ? "editor" : "list"))}
+          onSave={() => run(async () => {
+            const result = await configureRpc({ directory, gitEnabled });
+            cache.setQueryData(["prompt-settings"], result);
+            setDirectory(result.directory);
+            setGitEnabled(result.gitEnabled);
+            setCurrent(null); setName(""); setContent(""); setDescription(""); setTagsText(""); setFolder(""); setFilterFolder(undefined); setFilterTag(undefined); setHistory(false); setVersion(null);
+            await refresh();
+            success("Settings saved.");
+          })}
+          onInit={() => run(async () => {
+            const result = await initRpc({ remote });
+            cache.setQueryData(["prompt-git", root], result);
+            setRemote("");
+            success(result.message);
+          })}
+          onSync={() => run(async () => {
+            const result = await syncRpc({});
+            cache.setQueryData(["prompt-git", root], result);
+            await refresh();
+            success(result.message);
+          })}
+        />
+      ) : (
+        <View style={{ flex: 1, minHeight: 0, minWidth: 0, flexDirection: layout.compact ? "column" : "row", gap: 18 }}>
+          {showSidebar && (
+            <LibrarySidebar
+              colors={colors}
+              compact={layout.compact}
+              disabled={locked}
+              query={query}
+              setQuery={setQuery}
+              archived={archived}
+              setArchived={setArchived}
+              filterFolder={filterFolder}
+              setFilterFolder={setFilterFolder}
+              filterTag={filterTag}
+              setFilterTag={setFilterTag}
+              organize={organize}
+              setOrganize={setOrganize}
+              folders={folders.data ?? []}
+              tags={availableTags}
+              prompts={prompts.data}
+              loading={prompts.isLoading}
+              currentId={current?.id}
+              onOpen={openPrompt}
+              onRefresh={() => guard(() => run(async () => {
+                if (current) accept(await readRpc({ id: current.id }));
+                await refresh();
+              }))}
+              newFolder={newFolder}
+              setNewFolder={setNewFolder}
+              onCreateFolder={() => newFolder.trim() && createFolderAt(filterFolder ?? "", setFilterFolder)}
+              root={root}
+            />
+          )}
+          {showMain && <View style={{ flex: 1, minWidth: 0, minHeight: 0 }}>{mode === "list" ? welcome : editor}</View>}
+        </View>
+      )}
+      <ConfirmModal
+        open={Boolean(pending)}
+        title="Discard unsaved changes?"
+        message="You have unsaved changes. Discarding them restores the last saved state."
+        confirmLabel="Discard changes"
+        icon="TriangleAlert"
+        destructive
+        colors={colors}
+        onCancel={() => setPending(null)}
+        onConfirm={() => {
+          const action = pending;
+          setPending(null);
+          setName(current?.title ?? "");
+          setContent(current?.content ?? "");
+          setDescription(current?.description ?? "");
+          setTagsText(current?.tags.join(", ") ?? "");
+          setFolder(current?.folder ?? filterFolder ?? "");
+          setDirectory(settings.data?.directory ?? "");
+          setGitEnabled(settings.data?.gitEnabled ?? false);
+          action?.();
+        }}
+      />
+      <ConfirmModal
+        open={archiveConfirm && Boolean(current)}
+        title="Archive this prompt?"
+        message={`"${current?.title ?? ""}" will be removed from the library. Its version history stays available, and you can restore it from Archived.`}
+        confirmLabel="Archive"
+        icon="Archive"
+        destructive
+        colors={colors}
+        onCancel={() => setArchiveConfirm(false)}
+        onConfirm={() => run(async () => {
+          await archiveRpc({ id: current!.id, revision: current!.revision });
+          setArchiveConfirm(false);
+          accept(null); setMode("list"); await refresh();
+          success("Prompt archived.");
+        })}
+      />
     </View>
   );
 }
