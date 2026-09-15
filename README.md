@@ -19,7 +19,7 @@ Open **Prompts** in the sidebar to manage your library. Paseo provides the plugi
 - In the composer attachment menu, choose **Saved prompt**. Search by title, filename, or words in the prompt, then attach it to your message.
 - Submit `/prompts` in an agent composer to open the prompt panel.
 - Submit `/prompt code-review` to send `code-review.md` to the current agent and start a turn.
-- From the prompt panel, use **Send saved prompt to agent** to send the selected prompt.
+- From the prompt panel, choose **Send to agent** to send the selected prompt.
 
 Attachment search matches multiple words across the title, filename, and content. Exact names and title matches appear first, with up to 50 results. Attachments contain a snapshot of the saved prompt.
 
@@ -27,11 +27,11 @@ Attachment search matches multiple words across the title, filename, and content
 
 Choose **New prompt**, enter a filename and Markdown content, then save. The first Markdown heading becomes the title. Files keep their normalized names when you edit their content.
 
-Add a **Description** and comma-separated **Labels / tags** to explain and categorize a prompt. Search includes both fields; **Folders & tags** filters the library by folder or tag.
+Open **Details** in the editor to add a **Description** and comma-separated **Tags**. Search includes both fields. The folder chip above the list filters by folder and lists tags; the **Archived** chip includes archived prompts.
 
-Folders and subfolders are directories inside the library. Create them from **Folders & tags** or the editor's **Folder** controls. Selecting another folder and saving moves the prompt and retains its version history. Nested prompts use paths such as `/prompt engineering/security/code-review`.
+Folders and subfolders are directories inside the library. Create them from the folder chip or the editor's **Folder** field. Selecting another folder and saving moves the prompt and retains its version history. Nested prompts use paths such as `/prompt engineering/security/code-review`.
 
-Choose **Expand editor** to use the available workspace, and **Preview Markdown** to switch between editing and a formatted preview. **Collapse editor** returns to the library layout.
+Use the expand button to give the editor the available workspace, and the **Edit / Preview** toggle to switch between Markdown and a formatted preview.
 
 By default, the library lives at `~/.config/paseo/prompt-lib/`:
 
@@ -44,7 +44,7 @@ prompt-lib/
         └── code-review.2026-09-09T12-05-00-000Z_v2.md
 ```
 
-Each save creates a full Markdown snapshot. **Version history** lets you inspect and restore a snapshot as a new version. **Archive** removes the current prompt and retains its history; use **Include archived** to find and restore it.
+Each save creates a full Markdown snapshot. **History** opens a side panel to inspect a snapshot as source or preview and restore it as a new version. **Archive** removes the current prompt and retains its history; turn on the **Archived** chip to find it, then choose **Restore**.
 
 Descriptions and tags use a `paseo` JSON field in Markdown frontmatter and are included in snapshots. Agents receive the prompt body. Nested history follows `versions/<folder>/<prompt-name>/<prompt-name>.<timestamp>_v<number>.md`; existing flat prompts keep their paths.
 
@@ -71,7 +71,7 @@ Preferences live at `~/.config/paseo/prompt-manager.json`. If `XDG_CONFIG_HOME` 
 
 1. Configure your Git author name, email, and remote credentials on the daemon host.
 2. Turn **Git sync** on in library settings and save.
-3. Choose **Initialize Git**. Supply an origin URL to sync with a remote, or leave it blank for local Git checkpoints.
+3. Choose **Initialize**. Supply an origin URL to sync with a remote, or leave it blank for local Git checkpoints.
 4. Choose **Sync now** to commit prompt files and version history, fetch the remote branch, fast-forward, and push.
 
 Sync runs when requested. Branch divergence stops the sync and leaves local commits intact. Resolve it with Git, then sync again. The library must be the repository root. Unrelated staged files block sync.

@@ -1,27 +1,74 @@
-import type { PluginSurfaceProps } from "@getpaseo/plugin/client";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Icon, ScrollView } from "@getpaseo/plugin/client/react-native";
+import { Pressable, Text, View } from "react-native";
+import { radius, type Colors } from "./ui";
 
 type Props = {
   folders: string[];
   selected: string | undefined;
   onSelect: (folder: string | undefined) => void;
-  colors: PluginSurfaceProps["theme"]["colors"];
+  colors: Colors;
   disabled?: boolean;
   allowAll?: boolean;
+  maxHeight?: number;
 };
 
-export function FolderPicker({ folders, selected, onSelect, colors, disabled, allowAll }: Props) {
-  const choices = [...new Set(["", ...folders])].sort();
-  return <ScrollView style={{ maxHeight: 156, flexGrow: 0, minWidth: 0 }} keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 3, padding: 3 }}>
-    {allowAll && <Pressable accessibilityRole="button" accessibilityLabel="All folders" accessibilityState={{ selected: selected === undefined, disabled }} disabled={disabled} onPress={() => onSelect(undefined)} style={{ padding: 9, borderRadius: 6, backgroundColor: selected === undefined ? colors.surface2 : colors.surface0 }}>
-      <Text style={{ color: selected === undefined ? colors.accent : colors.foreground }}>All folders</Text>
-    </Pressable>}
-    {choices.map((folder) => <Pressable key={folder} accessibilityRole="button" accessibilityLabel={`Select folder ${folder || "Library root"}`} accessibilityState={{ selected: selected === folder, disabled }} disabled={disabled} onPress={() => onSelect(folder)} style={{ padding: 9, paddingLeft: 9 + Math.min(folder.split("/").length - 1, 6) * 12, borderRadius: 6, backgroundColor: selected === folder ? colors.surface2 : colors.surface0 }}>
-      <Text numberOfLines={1} style={{ color: selected === folder ? colors.accent : colors.foreground, fontSize: 13 }}>{folder ? `▸ ${folder.split("/").at(-1)}` : "Library root"}</Text>
-    </Pressable>)}
-  </ScrollView>;
+type RowProps = { label: string; icon: string; depth: number; selected: boolean; disabled?: boolean; onPress: () => void; colors: Colors; accessibilityLabel: string };
+
+function FolderRow({ label, icon, depth, selected, disabled, onPress, colors, accessibilityLabel }: RowProps) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      accessibilityState={{ selected, disabled: Boolean(disabled) }}
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => ({
+        flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 7, paddingRight: 8, paddingLeft: 8 + Math.min(depth, 6) * 14,
+        borderRadius: radius - 4, backgroundColor: selected ? colors.surface2 : pressed ? colors.surface2 : "transparent", opacity: disabled ? 0.5 : 1,
+      })}
+    >
+      <Icon name={icon} size={14} color={selected ? colors.accent : colors.foregroundMuted} />
+      <Text numberOfLines={1} style={{ color: selected ? colors.accent : colors.foreground, fontSize: 13, fontWeight: selected ? "600" : "400", flex: 1, minWidth: 0 }}>{label}</Text>
+      {selected && <Icon name="Check" size={14} color={colors.accent} />}
+    </Pressable>
+  );
 }
 
-export function FolderBreadcrumb({ folder, colors }: { folder: string; colors: Props["colors"] }) {
-  return <View style={{ minWidth: 0 }}><Text style={{ color: colors.foregroundMuted, fontSize: 12 }}>Library{folder ? ` / ${folder.split("/").join(" / ")}` : " / Root"}</Text></View>;
+export function FolderPicker({ folders, selected, onSelect, colors, disabled, allowAll, maxHeight = 180 }: Props) {
+  const choices = [...new Set(["", ...folders])].sort();
+  return (
+    <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight, flexGrow: 0, minWidth: 0, borderWidth: 1, borderColor: colors.border, borderRadius: radius - 2, backgroundColor: colors.surface0 }} contentContainerStyle={{ padding: 4, gap: 1 }}>
+      {allowAll && <FolderRow label="All folders" icon="Library" depth={0} selected={selected === undefined} disabled={disabled} onPress={() => onSelect(undefined)} colors={colors} accessibilityLabel="All folders" />}
+      {choices.map((folder) => (
+        <FolderRow
+          key={folder}
+          label={folder ? folder.split("/").at(-1)! : "Library root"}
+          icon={folder ? (selected === folder ? "FolderOpen" : "Folder") : "House"}
+          depth={folder ? folder.split("/").length : 0}
+          selected={selected === folder}
+          disabled={disabled}
+          onPress={() => onSelect(folder)}
+          colors={colors}
+          accessibilityLabel={`Select folder ${folder || "Library root"}`}
+        />
+      ))}
+    </ScrollView>
+  );
+}
+
+export function FolderBreadcrumb({ folder, colors }: { folder: string; colors: Colors }) {
+  const parts = folder ? folder.split("/") : [];
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 4, minWidth: 0 }}>
+      <Icon name="House" size={12} color={colors.foregroundMuted} />
+      <Text style={{ color: colors.foregroundMuted, fontSize: 12 }}>Library</Text>
+      {parts.map((part, index) => (
+        <View key={`${index}-${part}`} style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+          <Icon name="ChevronRight" size={12} color={colors.foregroundMuted} />
+          <Text numberOfLines={1} style={{ color: index === parts.length - 1 ? colors.foreground : colors.foregroundMuted, fontSize: 12, fontWeight: index === parts.length - 1 ? "600" : "400" }}>{part}</Text>
+        </View>
+      ))}
+      {!parts.length && <Text style={{ color: colors.foregroundMuted, fontSize: 12 }}>· root</Text>}
+    </View>
+  );
 }
