@@ -170,7 +170,7 @@ export function PromptLibrary({ theme, layout, agentId }: Props) {
     const list = await versionsRpc({ id: current!.id });
     const latest = list[0];
     if (!latest) throw new Error("This prompt has no saved versions to restore.");
-    const restored = await restoreRpc({ id: current!.id, filename: latest.filename, revision: null });
+    const restored = await restoreRpc({ id: current!.id, filename: latest.filename, revision: current!.revision });
     accept(restored);
     setDetails(false);
     await refresh();

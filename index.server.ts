@@ -13,7 +13,7 @@ export default function contribute(server: PluginServerContext) {
   server.handle(rpc.readPrompt, ({ id }) => library.read(id));
   server.handle(rpc.savePrompt, (input) => library.save(input));
   server.handle(rpc.importPrompts, (input) => library.import(input));
-  server.handle(rpc.archivePrompt, async (input) => { await library.archive(input); return {}; });
+  server.handle(rpc.archivePrompt, (input) => library.archive(input));
   server.handle(rpc.listVersions, ({ id }) => library.versions(id));
   server.handle(rpc.readVersion, (input) => library.version(input));
   server.handle(rpc.restoreVersion, (input) => library.restore(input));

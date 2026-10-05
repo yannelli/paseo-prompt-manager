@@ -4,24 +4,27 @@ A Markdown prompt library for [Paseo](https://paseo.sh). Create, edit, search, a
 
 ## Install
 
-Requires Paseo `0.8.0-beta.1` or later on the daemon and app. Git sync also requires Git on the daemon host.
-
-Enable plugins in **Settings → Plugins**, then install the release:
+Enable plugins in **Settings → Plugins**, then install the beta from npm:
 
 ```sh
-paseo plugin add yannelli/paseo-prompt-manager --ref v0.2.0
+paseo plugin add npm:@yannelli/paseo-prompt-manager@beta
 ```
+
+The beta requires Paseo `0.11.0-beta.3` or later on the daemon and on each app that shows the plugin. Git sync also requires Git on the daemon host.
+
+For Paseo 0.9 and 0.10, install `npm:@yannelli/paseo-prompt-manager`, which holds release 0.2.0. For Paseo 0.8, install 0.2.0 from Git with `paseo plugin add yannelli/paseo-prompt-manager --ref v0.2.0`.
 
 Open **Prompts** in the sidebar to manage your library. Paseo provides the plugin's runtime dependencies.
 
 ## Use prompts with agents
 
+- Choose **Prompts** in the agent composer bar to search saved prompts. Each result shows the title and up to four preview lines. Choose a result to send that prompt to the agent.
 - In the composer attachment menu, choose **Saved prompt**. Search by title, filename, or words in the prompt, then attach it to your message.
 - Submit `/prompts` in an agent composer to open the prompt panel.
 - Submit `/prompt code-review` to send `code-review.md` to the current agent and start a turn.
 - From the prompt panel, choose **Send to agent** to send the selected prompt.
 
-Attachment search matches multiple words across the title, filename, and content. Exact names and title matches appear first, with up to 50 results. Attachments contain a snapshot of the saved prompt.
+Attachment search matches many words across the title, filename, and content. Exact names and title matches appear first, with up to 50 results. Each result shows the title and a one-line preview of the first four body lines. Attachments contain a snapshot of the saved prompt.
 
 ## Edit and version prompts
 
@@ -84,8 +87,7 @@ Requires Node.js 24 or later and npm.
 git clone https://github.com/yannelli/paseo-prompt-manager.git
 cd paseo-prompt-manager
 npm ci
-npm run typecheck
-npm test
+npm run check
 paseo plugin install "$PWD"
 ```
 
@@ -97,7 +99,24 @@ paseo plugin ls paseo-prompt-manager
 paseo plugin logs paseo-prompt-manager
 ```
 
-The tests cover storage, imports, search, versioning, conflicts, and Git sync using temporary directories and local Git remotes. Browser file-picker and desktop/mobile UI checks remain manual.
+The tests cover storage, imports, search, versioning, conflicts, Git sync, and the release script using temporary directories and local Git remotes. Browser file-picker and desktop/mobile UI checks remain manual.
+
+[docs/INDEX.md](docs/INDEX.md) lists project notes, including which Paseo SDK release adds each plugin API this project uses. Read it before changing `requirements.paseo` or the `@getpaseo/plugin` version.
+
+## Releases
+
+GitHub Actions releases on qualifying pushes to `main` and `beta`. `main` publishes `X.Y.Z` to the npm `latest` dist-tag and marks the GitHub release as Latest. `beta` publishes `X.Y.Z-beta.N` to the `beta` dist-tag as a GitHub pre-release. The workflow updates `package.json` and `package-lock.json`, pushes an annotated tag, publishes release notes, and publishes [`@yannelli/paseo-prompt-manager`](https://www.npmjs.com/package/@yannelli/paseo-prompt-manager) through npm trusted publishing (OIDC) with no npm token. See [npm publishing](docs/npm-publishing.md) for the channels, package contents, and trusted publisher setup.
+
+Use Conventional Commits in commits and squash-merge titles:
+
+| Commit | Version change |
+| --- | --- |
+| `fix:`, `perf:`, `revert:` | Patch |
+| `feat:` | Minor |
+| `!` after the type/scope, or a `BREAKING CHANGE:` footer | Major, including before 1.0 |
+| `docs:`, `chore:`, `ci:`, and other types without a breaking marker | No release |
+
+Run `npm run release:dry-run` from a clean `main` or `beta` checkout with all tags fetched to preview the next release. Rerun the **Release** workflow to complete a GitHub or npm publication interrupted after its tag was pushed.
 
 ## License
 
