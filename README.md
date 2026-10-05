@@ -1,3 +1,5 @@
+![Prompt Manager for Paseo: your prompts, versioned.](docs/images/github-banner.png)
+
 # Paseo Prompt Manager
 
 A Markdown prompt library for [Paseo](https://paseo.sh). Create, edit, search, and reuse prompts across agents, with local version history and optional Git sync.
@@ -78,6 +80,32 @@ Preferences live at `~/.config/paseo/prompt-manager.json`. If `XDG_CONFIG_HOME` 
 4. Choose **Sync now** to commit prompt files and version history, fetch the remote branch, fast-forward, and push.
 
 Sync runs when requested. Branch divergence stops the sync and leaves local commits intact. Resolve it with Git, then sync again. The library must be the repository root. Unrelated staged files block sync.
+
+## Screenshots
+
+These images are illustrations of the plugin UI with sample data. They are not captures of a running Paseo app. Each image is 1920×1080 in dark and light themes. See [promo images](docs/promo-images.md) to render them again.
+
+### Prompt library
+
+![Prompts panel with the library list and the Code review prompt open in the editor](docs/promo/light/library.png)
+
+### Composer picker
+
+![Prompts popover above the agent composer with search results for review](docs/promo/light/composer.png)
+
+### Version history
+
+![Expanded editor with the version history panel and version 1 selected](docs/promo/light/history.png)
+
+### Import
+
+![Import prompts view with device and host sources and an import result](docs/promo/light/import.png)
+
+### Git sync
+
+![Library settings with Git sync on and the repository status](docs/promo/light/git-sync.png)
+
+The dark versions are in [docs/promo/dark](docs/promo/dark). Open [docs/promo/index.html](docs/promo/index.html) to compare both themes.
 
 ## Development
 

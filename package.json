@@ -1,7 +1,7 @@
 {
   "name": "@yannelli/paseo-prompt-manager",
   "type": "module",
-  "version": "0.3.0-beta.2",
+  "version": "0.3.0",
   "description": "Markdown prompt library for Paseo with local version history, imports, and optional Git sync",
   "license": "MIT",
   "author": "Ryan Yannelli",
