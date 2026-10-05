@@ -250,7 +250,9 @@ test("searches trimmed multiword terms across titles, filenames and content with
   const { items } = await library.search("  REVIEW   security ");
   assert.deepEqual(items.map((item) => item.id), ["security-review", "other", "review"]);
   assert.equal(items[0]!.text, "# Security Review\nCheck permissions.");
-  assert.equal(items[0]!.subtitle, "security-review.md");
+  assert.equal(items[0]!.title, "Security Review");
+  assert.equal(items[0]!.identifier, "");
+  assert.equal(items[0]!.subtitle, "Check permissions.");
   assert.equal(items[0]!.url, new URL(`file://${root}/security-review.md`).href);
   assert.equal((await library.search("review")).items[0]!.id, "review");
   assert.equal((await library.search("security-review.md")).items[0]!.id, "security-review");
@@ -443,4 +445,34 @@ test("rolls back a move when creating its new snapshot fails", async (t) => {
   assert.deepEqual(await library.versions(first.id), history);
   await assert.rejects(library.read("target/code-review"), /not found/);
   await assert.rejects(readFile(join(root, "target", "code-review.md")), { code: "ENOENT" });
+});
+
+test("lists and searches past unreadable prompt files", async (t) => {
+  const { library, root } = await fixture(t);
+  const errors = t.mock.method(console, "error", () => {});
+  await create(library);
+  await writeFile(join(root, "bad-metadata.md"), "---\npaseo: {not json}\n---\nBody");
+  await writeFile(join(root, "oversized.md"), "x".repeat(600_000));
+  assert.deepEqual((await library.list()).map((prompt) => prompt.id), ["code-review"]);
+  assert.deepEqual((await library.search("code")).items.map((item) => item.id), ["code-review"]);
+  assert.equal(errors.mock.callCount(), 4);
+  await assert.rejects(library.read("bad-metadata"), /Invalid prompt metadata/);
+});
+
+test("ignores stray files in a version folder", async (t) => {
+  const { library, root } = await fixture(t);
+  const first = await create(library);
+  await writeFile(join(root, "versions", first.id, "notes.md"), "Not a version");
+  const saved = await library.save({ id: first.id, name: "ignored", content: "Second version", revision: first.revision });
+  assert.deepEqual((await library.versions(saved.id)).map((version) => version.version), [2, 1]);
+  await assert.rejects(library.version({ id: saved.id, filename: "notes.md" }), /Invalid version filename/);
+});
+
+test("attachment search previews the first four body lines after the title", async (t) => {
+  const { library } = await fixture(t);
+  await library.save({ name: "Steps", content: "# Steps\n\nRead the diff.\n- Check tests\n> Keep it small\n```\nnpm test\n```\nFifth line", revision: null });
+  await library.save({ name: "Heading only", content: "# Heading only", revision: null, description: "Use for headings" });
+  const [headingOnly, steps] = (await library.search("")).items;
+  assert.equal(steps!.subtitle, "Read the diff. Check tests Keep it small npm test");
+  assert.equal(headingOnly!.subtitle, "Use for headings");
 });

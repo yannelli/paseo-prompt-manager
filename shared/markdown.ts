@@ -91,3 +91,11 @@ export function parseInlineMarkdown(text: string, depth = 0): MarkdownInline[] {
   if (offset < text.length) tokens.push({ kind: "text", text: text.slice(offset) });
   return tokens;
 }
+
+export function previewLines(content: string, limit = 4) {
+  const blocks = parseMarkdown(content);
+  const heading = blocks.findIndex((block) => block.kind === "heading");
+  return blocks.filter((_, index) => index !== heading)
+    .flatMap((block) => "text" in block ? block.text.split("\n") : [])
+    .map((line) => line.trim()).filter(Boolean).slice(0, limit);
+}

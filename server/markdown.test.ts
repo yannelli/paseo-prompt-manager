@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { parseInlineMarkdown, parseMarkdown } from "../shared/markdown.ts";
+import { parseInlineMarkdown, parseMarkdown, previewLines } from "../shared/markdown.ts";
 
 test("preview recognizes headings, lists, tasks, quotes and rules", () => {
   assert.deepEqual(parseMarkdown("# Review\r\n\r\nRead first.\r\n- [ ] Inspect\r\n  1. Test\r\n- [x] Save\r\n> Keep changes small\r\n> Explain failures\r\n\r\n---"), [
@@ -46,4 +46,10 @@ test("escaped punctuation remains literal", () => {
   assert.deepEqual(parseInlineMarkdown("\\*literal\\*"), [
     { kind: "text", text: "*" }, { kind: "text", text: "literal" }, { kind: "text", text: "*" },
   ]);
+});
+
+test("preview lines skip the title heading, blank lines and rules", () => {
+  assert.deepEqual(previewLines("Intro\n\n# Review\n\n- Read\n- Test\n\n---\n\n```\nnpm test\n```\nDone"), ["Intro", "Read", "Test", "npm test"]);
+  assert.deepEqual(previewLines("# Only a title"), []);
+  assert.deepEqual(previewLines("# A\n## B\nC", 2), ["B", "C"]);
 });

@@ -4,6 +4,7 @@ import { link, lstat, mkdir, open, opendir, readdir, rename, rmdir, unlink } fro
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, parse, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { previewLines } from "../shared/markdown.ts";
 import type { ImportResult, LibrarySettings, Prompt, Version } from "../shared/prompts.ts";
 
 const MAX_BYTES = 512_000;
@@ -40,6 +41,7 @@ function normalizeFolder(path: string, prompt = false) {
 }
 
 const folderOf = (id: string) => id.includes("/") ? id.slice(0, id.lastIndexOf("/")) : "";
+const preview = (content: string) => previewLines(content).join(" ").replace(/\s+/g, " ").slice(0, 300);
 type Metadata = { description: string; tags: string[] };
 
 function metadata(value: Metadata): Metadata {
@@ -51,7 +53,9 @@ function metadata(value: Metadata): Metadata {
 function decode(raw: string) {
   const header = /^---\npaseo: (\{[^\n]*\})\n---\n/.exec(raw);
   if (!header) return { content: raw, description: "", tags: [] as string[] };
-  return { content: raw.slice(header[0].length), ...metadata(JSON.parse(header[1]!) as Metadata) };
+  let value: Metadata;
+  try { value = JSON.parse(header[1]!) as Metadata; } catch { throw new Error("Invalid prompt metadata."); }
+  return { content: raw.slice(header[0].length), ...metadata(value) };
 }
 
 function encode(content: string, value: Metadata) {
@@ -213,7 +217,8 @@ export class PromptLibrary {
     const versions: Version[] = [];
     for (const filename of entries) {
       if (!filename.endsWith(".md")) continue;
-      const version = this.parseVersion(id, filename);
+      let version: Version;
+      try { version = this.parseVersion(id, filename); } catch { continue; }
       if (await regularFile(join(path, filename))) versions.push(version);
     }
     return versions.sort((a, b) => b.version - a.version || b.filename.localeCompare(a.filename));
@@ -314,8 +319,12 @@ export class PromptLibrary {
     const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
     const result: Prompt[] = [];
     for (const id of ids) {
-      const prompt = await this.current(root, id);
-      if (!prompt || (!archived && prompt.archived) || (folder !== undefined && prompt.folder !== folder)
+      let prompt: Prompt | null;
+      try { prompt = await this.current(root, id); } catch (error) {
+        console.error(`Skipping prompt "${id}": ${error instanceof Error ? error.message : String(error)}`);
+        continue;
+      }
+      if (!prompt ||(!archived && prompt.archived) || (folder !== undefined && prompt.folder !== folder)
         || (tag !== undefined && !prompt.tags.includes(tag))) continue;
       const text = `${prompt.title}\n${id}.md\n${prompt.content}\n${prompt.description}\n${prompt.tags.join(" ")}\n${prompt.folder}`.toLowerCase();
       if (terms.every((term) => text.includes(term))) result.push(prompt);
@@ -337,8 +346,8 @@ export class PromptLibrary {
       };
       const prompts = (await this.matching(root, query, false)).sort((a, b) => rank(a) - rank(b) || a.title.localeCompare(b.title));
       return { items: prompts.slice(0, 50).map((prompt) => ({
-        id: prompt.id, identifier: prompt.id, url: pathToFileURL(join(root, `${prompt.id}.md`)).href,
-        title: prompt.title, subtitle: `${prompt.id}.md`, text: prompt.content, resourceType: "prompt",
+        id: prompt.id, identifier: "", url: pathToFileURL(join(root, `${prompt.id}.md`)).href,
+        title: prompt.title, subtitle: preview(prompt.content) || prompt.description, text: prompt.content, resourceType: "prompt",
       })) };
     });
   }
