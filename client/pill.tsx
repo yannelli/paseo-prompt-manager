@@ -1,6 +1,6 @@
 import type { PluginButtonContentProps, PluginButtonRegistration, PluginClientContext } from "@getpaseo/plugin/client";
 import { usePaseo, useRpc } from "@getpaseo/plugin/client";
-import { Icon, TextInput, useToast } from "@getpaseo/plugin/client/react-native";
+import { Icon, ScrollView, TextInput, useToast } from "@getpaseo/plugin/client/react-native";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
@@ -33,12 +33,13 @@ function PromptPicker({ theme, layout, close, ...target }: PluginButtonContentPr
   const items = results.data?.items.slice(0, RESULT_LIMIT) ?? [];
   const muted = { color: colors.foregroundMuted, fontSize: 12 };
   return (
-    <View style={{ width: layout.compact ? "100%" : 280, gap: 8 }}>
+    <View style={{ width: layout.compact ? "100%" : 280, flexShrink: 1, minHeight: 0, gap: 8 }}>
       <TextInput accessibilityLabel="Search saved prompts" value={query} onChangeText={setQuery} autoFocus={!layout.compact} autoCapitalize="none" autoCorrect={false} placeholder="Search prompts" placeholderTextColor={colors.foregroundMuted} style={{ ...inputStyle(colors), paddingVertical: 7, fontSize: 13 }} />
       {results.isLoading && <Text style={muted}>Loading…</Text>}
       {results.error && <Text style={{ ...muted, color: colors.statusDanger }}>{results.error.message}</Text>}
       {send.error && <Text style={{ ...muted, color: colors.statusDanger }}>{send.error.message}</Text>}
       {results.data && items.length === 0 && <Text style={muted}>{query.trim() ? "No matching prompts." : "No saved prompts yet."}</Text>}
+      <ScrollView keyboardShouldPersistTaps="handled" style={{ flexGrow: 0, flexShrink: 1, maxHeight: layout.compact ? 320 : 360, minHeight: 0 }} contentContainerStyle={{ gap: 8 }}>
       {items.map((item) => (
         <Pressable
           key={item.id}
@@ -55,6 +56,7 @@ function PromptPicker({ theme, layout, close, ...target }: PluginButtonContentPr
           <Text numberOfLines={4} style={{ ...muted, lineHeight: 16 }}>{previewLines(item.text).join("\n") || item.subtitle}</Text>
         </Pressable>
       ))}
+      </ScrollView>
       {(results.data?.items.length ?? 0) > RESULT_LIMIT && <Text style={muted}>Showing {RESULT_LIMIT} of {results.data!.items.length}. Refine the search.</Text>}
     </View>
   );
