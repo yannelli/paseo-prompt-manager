@@ -1,6 +1,6 @@
 import type { PluginSurfaceProps } from "@getpaseo/plugin/client";
 import { Icon, Modal } from "@getpaseo/plugin/client/react-native";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Pressable, Text, View, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
 
 export type Colors = PluginSurfaceProps["theme"]["colors"];
@@ -14,6 +14,16 @@ export function inputStyle(colors: Colors): TextStyle {
     color: colors.foreground, backgroundColor: colors.surface1, borderColor: colors.border,
     width: "100%", minWidth: 0, borderWidth: 1, borderRadius: radius, paddingVertical: 10, paddingHorizontal: 12, fontSize: 14,
   };
+}
+
+/** Returns `value` once it has stopped changing for `delay` milliseconds. */
+export function useDebounced<Value>(value: Value, delay: number) {
+  const [settled, setSettled] = useState(value);
+  useEffect(() => {
+    const timer = setTimeout(() => setSettled(value), delay);
+    return () => clearTimeout(timer);
+  }, [value, delay]);
+  return settled;
 }
 
 export function relativeTime(iso: string, now = Date.now()) {

@@ -96,3 +96,95 @@ test("sync tracks nested prompts, metadata, and moved version history", async (t
   await synchronizeGit(root);
   assert.deepEqual(command(root, "ls-files").split("\n"), ["operations/review.md", `versions/operations/review/${history}`]);
 });
+
+async function bare(base: string, branch = "main") {
+  const remote = join(base, `${branch}-remote.git`);
+  await mkdir(remote);
+  command(remote, "init", "--bare", `--initial-branch=${branch}`);
+  return remote;
+}
+
+async function machine(base: string, name: string, remote: string, branch = "") {
+  const root = join(base, name);
+  await mkdir(root);
+  await initializeGit(root, "", "");
+  command(root, "config", "user.name", "Prompt test");
+  command(root, "config", "user.email", "test@example.invalid");
+  return { root, connect: () => initializeGit(root, remote, branch) };
+}
+
+test("connecting a library with its own prompts merges an existing remote library", async (t) => {
+  const { base, root } = await fixture(t);
+  const remote = await bare(base);
+  await initializeGit(root, remote);
+  await writeFile(join(root, "review.md"), "first host");
+  await synchronizeGit(root);
+  const second = await machine(base, "second", remote);
+  await writeFile(join(second.root, "plan.md"), "second host");
+  await synchronizeGit(second.root);
+  await second.connect();
+  await synchronizeGit(second.root);
+  assert.equal(await readFile(join(second.root, "review.md"), "utf8"), "first host");
+  await synchronizeGit(root);
+  assert.equal(await readFile(join(root, "plan.md"), "utf8"), "second host");
+});
+
+test("an empty library pulls a remote library and edits to different prompts merge", async (t) => {
+  const { base, root } = await fixture(t);
+  const remote = await bare(base);
+  await initializeGit(root, remote);
+  await writeFile(join(root, "review.md"), "review");
+  await synchronizeGit(root);
+  const second = await machine(base, "second", remote);
+  await second.connect();
+  await synchronizeGit(second.root);
+  assert.equal(await readFile(join(second.root, "review.md"), "utf8"), "review");
+  await writeFile(join(second.root, "plan.md"), "plan");
+  await synchronizeGit(second.root);
+  await writeFile(join(root, "review.md"), "edited review");
+  await synchronizeGit(root);
+  assert.equal(await readFile(join(root, "plan.md"), "utf8"), "plan");
+  assert.equal(command(remote, "show", "main:review.md"), "edited review");
+});
+
+test("connect follows the remote default branch, edits origin and validates the branch", async (t) => {
+  const { base, root } = await fixture(t);
+  const trunk = await bare(base, "trunk");
+  const seed = await machine(base, "seed", trunk, "trunk");
+  await seed.connect();
+  await writeFile(join(seed.root, "seed.md"), "seed");
+  await synchronizeGit(seed.root);
+  const status = await initializeGit(root, trunk);
+  assert.equal(status.branch, "trunk");
+  assert.equal(status.remote, trunk);
+  const other = await bare(base, "other");
+  assert.equal((await initializeGit(root, other, "prompts")).branch, "prompts");
+  assert.equal(command(root, "remote", "get-url", "origin"), other);
+  await assert.rejects(initializeGit(root, other, "--force"), /valid branch/);
+  await assert.rejects(initializeGit(root, other, "bad..name"), /valid branch/);
+  await writeFile(join(root, "review.md"), "one");
+  await synchronizeGit(root);
+  assert.equal(command(other, "show", "prompts:review.md"), "one");
+  const moved = join(base, "moved.git");
+  command(base, "clone", "--bare", other, moved);
+  assert.equal((await initializeGit(root, moved)).branch, "prompts", "a tracking branch keeps its name when the URL changes");
+  assert.equal((await initializeGit(root, "")).remote, "");
+  await assert.rejects(initializeGit(root, join(base, "missing.git")), /Could not reach origin/);
+});
+
+test("a local-only library with commits adopts the remote default branch when it connects", async (t) => {
+  const { base, root } = await fixture(t);
+  const trunk = await bare(base, "trunk");
+  const seed = await machine(base, "seed", trunk, "trunk");
+  await seed.connect();
+  await writeFile(join(seed.root, "seed.md"), "seed");
+  await synchronizeGit(seed.root);
+  await writeFile(join(root, "local.md"), "local");
+  await synchronizeGit(root);
+  assert.equal((await gitStatus(root)).branch, "main");
+  assert.equal((await initializeGit(root, trunk)).branch, "trunk");
+  await synchronizeGit(root);
+  assert.equal(await readFile(join(root, "seed.md"), "utf8"), "seed");
+  assert.equal(command(trunk, "show", "trunk:local.md"), "local");
+  assert.equal(command(trunk, "branch", "--list", "main"), "");
+});

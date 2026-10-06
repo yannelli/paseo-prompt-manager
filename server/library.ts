@@ -5,9 +5,10 @@ import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, parse, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { previewLines } from "../shared/markdown.ts";
-import type { ImportResult, LibrarySettings, Prompt, Version } from "../shared/prompts.ts";
+import type { ImportResult, LibrarySettings, LibrarySettingsInput, Prompt, Version } from "../shared/prompts.ts";
 
 const MAX_BYTES = 512_000;
+const SYNC_MODES = ["manual", "changes", "interval"];
 const IMPORT_MAX_BYTES = 8_000_000;
 const IMPORT_MAX_FILES = 100;
 const IMPORT_MAX_ENTRIES = 5_000;
@@ -65,11 +66,23 @@ function encode(content: string, value: Metadata) {
   return raw;
 }
 
+function syncMode(value: unknown): LibrarySettings["syncMode"] {
+  if (typeof value !== "string" || !SYNC_MODES.includes(value)) throw new Error("Invalid prompt library settings.");
+  return value as LibrarySettings["syncMode"];
+}
+
+function syncInterval(value: unknown) {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 1 || value > 1440) throw new Error("Invalid prompt library settings.");
+  return value;
+}
+
 function directoryPath(value: string) {
   const expanded = value === "~" ? homedir() : value.startsWith("~/") ? join(homedir(), value.slice(2)) : value;
   if (!isAbsolute(expanded)) throw new Error("Choose an absolute directory path.");
   return resolve(expanded);
 }
+
+const fileKey = (info: { ino: number; size: number; mtimeMs: number }) => `${info.ino}:${info.size}:${info.mtimeMs}`;
 
 async function regularFile(path: string) {
   try {
@@ -105,15 +118,22 @@ async function readFile(path: string) {
   try {
     const info = await handle.stat();
     if (!info.isFile() || info.size > MAX_BYTES) throw new Error("Prompt exceeds the 512 KB file limit.");
-    const buffer = Buffer.alloc(MAX_BYTES + 1);
+    // Size the buffer from stat. The spare byte detects a file that grew after stat.
+    let buffer = Buffer.allocUnsafe(info.size + 1);
     let length = 0;
-    while (length < buffer.length) {
+    while (true) {
+      if (length === buffer.length) {
+        if (length > MAX_BYTES) break;
+        const grown = Buffer.allocUnsafe(MAX_BYTES + 1);
+        buffer.copy(grown, 0, 0, length);
+        buffer = grown;
+      }
       const { bytesRead } = await handle.read(buffer, length, buffer.length - length, null);
       if (bytesRead === 0) break;
       length += bytesRead;
     }
     if (length > MAX_BYTES) throw new Error("Prompt exceeds the 512 KB file limit.");
-    return { content: buffer.subarray(0, length).toString("utf8"), updatedAt: info.mtime.toISOString() };
+    return { content: buffer.subarray(0, length).toString("utf8"), updatedAt: info.mtime.toISOString(), key: fileKey(info) };
   } finally {
     await handle.close();
   }
@@ -146,6 +166,8 @@ async function atomicWrite(path: string, content: string, exclusive = false) {
 export class PromptLibrary {
   private readonly configPath: string;
   private queue: Promise<unknown> = Promise.resolve();
+  private index = new Map<string, { key: string; prompt: Prompt }>();
+  onChange?: () => void;
 
   constructor(configPath = join(configHome(), "paseo", "prompt-manager.json")) {
     this.configPath = configPath;
@@ -162,21 +184,43 @@ export class PromptLibrary {
       const value: unknown = JSON.parse((await readFile(this.configPath)).content);
       if (!value || typeof value !== "object" || !("directory" in value) || typeof value.directory !== "string"
         || !("gitEnabled" in value) || typeof value.gitEnabled !== "boolean") throw new Error("Invalid prompt library settings.");
-      return { directory: directoryPath(value.directory), gitEnabled: value.gitEnabled };
+      const sync = value as { syncMode?: unknown; syncInterval?: unknown };
+      return {
+        directory: directoryPath(value.directory), gitEnabled: value.gitEnabled,
+        syncMode: syncMode(sync.syncMode ?? "manual"), syncInterval: syncInterval(sync.syncInterval ?? 15),
+      };
     } catch (error) {
       if (!missing(error)) throw error;
-      return { directory: join(configHome(), "paseo", "prompt-lib"), gitEnabled: false };
+      return { directory: join(configHome(), "paseo", "prompt-lib"), gitEnabled: false, syncMode: "manual", syncInterval: 15 };
     }
   }
 
   settings() { return this.serialize(() => this.loadSettings()); }
 
-  configure(settings: LibrarySettings) {
+  configure(settings: LibrarySettingsInput) {
     return this.serialize(async () => {
-      const value = { directory: directoryPath(settings.directory), gitEnabled: settings.gitEnabled };
+      const previous = await this.loadSettings();
+      const value: LibrarySettings = {
+        directory: directoryPath(settings.directory), gitEnabled: settings.gitEnabled,
+        syncMode: syncMode(settings.syncMode ?? previous.syncMode), syncInterval: syncInterval(settings.syncInterval ?? previous.syncInterval),
+      };
       await directory(value.directory);
       await mkdir(dirname(this.configPath), { recursive: true });
       await atomicWrite(this.configPath, `${JSON.stringify(value, null, 2)}\n`);
+      this.invalidate();
+      return value;
+    });
+  }
+
+  /** Drops cached prompt summaries, for example after Git rewrites files. */
+  invalidate() { this.index.clear(); }
+
+  /** Runs an operation with the library lock held, so no prompt writes interleave. */
+  exclusive<T>(operation: () => Promise<T>) { return this.serialize(operation); }
+
+  private write<T>(operation: (root: string, settings: LibrarySettings) => Promise<T>) {
+    return this.withRoot(operation).then((value) => {
+      this.onChange?.();
       return value;
     });
   }
@@ -236,14 +280,31 @@ export class PromptLibrary {
     const file = join(root, `${id}.md`);
     if (await directory(dirname(file), false) && await regularFile(file)) {
       const { content: raw, updatedAt } = await readFile(file);
-      const value = decode(raw);
-      return { id, folder: folderOf(id), title: this.title(id, value.content), ...value, revision: digest(raw), updatedAt, archived: false };
+      return this.active(id, raw, updatedAt);
     }
     const latest = (await this.history(root, id))[0];
     if (!latest) return null;
     const raw = await this.historicalContent(root, id, latest.filename);
     const value = decode(raw);
     return { id, folder: folderOf(id), title: this.title(id, value.content), ...value, revision: digest(`archived\0${latest.filename}\0${raw}`), updatedAt: latest.createdAt, archived: true };
+  }
+
+  private active(id: string, raw: string, updatedAt: string): Prompt {
+    const value = decode(raw);
+    return { id, folder: folderOf(id), title: this.title(id, value.content), ...value, revision: digest(raw), updatedAt, archived: false };
+  }
+
+  /** Reads a prompt found by scan(), which already skipped linked folders, reusing unchanged files. */
+  private async indexed(root: string, id: string): Promise<Prompt | null> {
+    const file = join(root, `${id}.md`);
+    const info = await regularFile(file);
+    if (!info) return this.current(root, id);
+    const cached = this.index.get(file);
+    if (cached?.key === fileKey(info)) return cached.prompt;
+    const { content: raw, updatedAt, key } = await readFile(file);
+    const prompt = this.active(id, raw, updatedAt);
+    this.index.set(file, { key, prompt });
+    return prompt;
   }
 
   private title(id: string, content: string) {
@@ -305,7 +366,7 @@ export class PromptLibrary {
   }
 
   createFolder(path: string) {
-    return this.withRoot(async (root) => {
+    return this.write(async (root) => {
       const normalized = normalizeFolder(path);
       await directory(join(root, normalized));
       return { path: normalized };
@@ -318,9 +379,11 @@ export class PromptLibrary {
     if (archived) for (const id of (await this.scan(root, true)).ids) ids.add(id);
     const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
     const result: Prompt[] = [];
+    const seen = new Set<string>();
     for (const id of ids) {
       let prompt: Prompt | null;
-      try { prompt = await this.current(root, id); } catch (error) {
+      seen.add(join(root, `${id}.md`));
+      try { prompt = await this.indexed(root, id); } catch (error) {
         console.error(`Skipping prompt "${id}": ${error instanceof Error ? error.message : String(error)}`);
         continue;
       }
@@ -329,6 +392,7 @@ export class PromptLibrary {
       const text = `${prompt.title}\n${id}.md\n${prompt.content}\n${prompt.description}\n${prompt.tags.join(" ")}\n${prompt.folder}`.toLowerCase();
       if (terms.every((term) => text.includes(term))) result.push(prompt);
     }
+    for (const file of this.index.keys()) if (!seen.has(file)) this.index.delete(file);
     return result.sort((a, b) => a.title.localeCompare(b.title));
   }
 
@@ -353,7 +417,7 @@ export class PromptLibrary {
   }
 
   import(input: { paths: string[]; files: { name: string; content: string }[]; folder?: string }): Promise<ImportResult> {
-    return this.withRoot(async (root) => {
+    return this.write(async (root) => {
       const result: ImportResult = { imported: [], skipped: [] };
       const destinationFolder = validFolder(input.folder ?? "");
       let candidates = 0;
@@ -436,7 +500,7 @@ export class PromptLibrary {
   }
 
   save(input: { id?: string; name: string; content: string; revision: string | null; folder?: string; description?: string; tags?: string[] }) {
-    return this.withRoot(async (root) => {
+    return this.write(async (root) => {
       validateContent(input.content);
       const oldId = input.id ? validId(input.id) : undefined;
       const folder = input.folder === undefined ? (oldId ? folderOf(oldId) : "") : input.folder;
@@ -499,7 +563,7 @@ export class PromptLibrary {
   }
 
   archive(input: { id: string; revision: string }) {
-    return this.withRoot(async (root) => {
+    return this.write(async (root) => {
       const current = await this.current(root, input.id);
       this.checkRevision(current, input.revision);
       if (!current || current.archived) throw new Error("Active prompt not found.");
@@ -517,7 +581,7 @@ export class PromptLibrary {
   }
 
   restore(input: { id: string; filename: string; revision: string | null }) {
-    return this.withRoot(async (root) => {
+    return this.write(async (root) => {
       const current = await this.current(root, input.id);
       this.checkRevision(current, input.revision);
       const content = await this.historicalContent(root, input.id, input.filename);
