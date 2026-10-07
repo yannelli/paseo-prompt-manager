@@ -1,7 +1,8 @@
 import { Icon, ScrollView, TextInput } from "@getpaseo/plugin/client/react-native";
 import { Switch, Text, View } from "react-native";
-import type { LibrarySettings } from "../shared/prompts";
-import { Button, Card, Field, IconButton, Meta, SectionTitle, inputStyle, radius, type Colors } from "./ui";
+import type { LibrarySettings, SyncMode, SyncState } from "../shared/prompts";
+import { SyncModePicker } from "./sync";
+import { Banner, Button, Card, Field, IconButton, Meta, SectionTitle, inputStyle, radius, relativeTime, type Colors } from "./ui";
 
 type GitStatus = { initialized: boolean; branch: string; remote: string; changes: number; message: string };
 
@@ -16,15 +17,21 @@ type Props = {
   setGitEnabled: (value: boolean) => void;
   remote: string;
   setRemote: (value: string) => void;
+  branch: string;
+  setBranch: (value: string) => void;
+  syncState: SyncState | undefined;
   configDirty: boolean;
   onSave: () => void;
   onInit: () => void;
   onSync: () => void;
+  onSyncMode: (mode: SyncMode, interval: number) => void;
   onBack: () => void;
 };
 
-export function LibrarySettingsScreen({ colors, busy, settings, git, directory, setDirectory, gitEnabled, setGitEnabled, remote, setRemote, configDirty, onSave, onInit, onSync, onBack }: Props) {
+export function LibrarySettingsScreen({ colors, busy, settings, git, directory, setDirectory, gitEnabled, setGitEnabled, remote, setRemote, branch, setBranch, syncState, configDirty, onSave, onInit, onSync, onSyncMode, onBack }: Props) {
   const status = git.data;
+  const connectionChanged = Boolean(status && (remote.trim() !== status.remote || (branch.trim() !== "" && branch.trim() !== status.branch)));
+  const blocked = busy || configDirty;
   return (
     <ScrollView keyboardShouldPersistTaps="handled" style={{ flex: 1, minWidth: 0 }} contentContainerStyle={{ gap: 14, paddingBottom: 28, width: "100%", maxWidth: 680 }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
@@ -59,23 +66,33 @@ export function LibrarySettingsScreen({ colors, busy, settings, git, directory, 
                 {status.initialized && <Stat colors={colors} icon="FileDiff" label="Pending" value={`${status.changes} changed file${status.changes === 1 ? "" : "s"}`} tone={status.changes > 0 ? colors.statusWarning : undefined} />}
                 {status.initialized && <Stat colors={colors} icon="Globe" label="Remote" value={status.remote || "No remote"} />}
               </View>
-              <Meta colors={colors} icon="Info">{status.message}</Meta>
-              {(!status.initialized || !status.remote) && (
-                <Field label={status.initialized ? "Add a remote" : "Initialize repository"} hint={status.initialized ? "Set an origin URL to push and pull." : "Leave the URL blank for local checkpoints only."} colors={colors}>
-                  <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
-                    <TextInput accessibilityLabel="Git remote URL" value={remote} onChangeText={setRemote} editable={!busy && !configDirty} autoCapitalize="none" autoCorrect={false} placeholder="git@github.com:you/prompts.git" placeholderTextColor={colors.foregroundMuted} style={{ ...inputStyle(colors), backgroundColor: colors.surface0, flex: 1, width: undefined, fontFamily: "monospace", fontSize: 13 }} />
-                    <Button title={status.initialized ? "Set remote" : "Initialize"} icon={status.initialized ? "Link" : "GitBranchPlus"} onPress={onInit} colors={colors} disabled={busy || configDirty || (status.initialized && !remote.trim())} />
-                  </View>
-                </Field>
-              )}
+              {status.message !== "" && <Meta colors={colors} icon="Info">{status.message}</Meta>}
+              {syncState?.lastError && !syncState.running && <Banner tone="danger" colors={colors} message={`Last sync failed: ${syncState.lastError}`} />}
+              <Field label="Remote repository" hint="Paste an HTTPS or SSH URL, for example from GitHub. The repository can be empty or already hold prompts from another machine. Leave it blank for local checkpoints only." colors={colors}>
+                <TextInput accessibilityLabel="Git remote URL" value={remote} onChangeText={setRemote} editable={!blocked} autoCapitalize="none" autoCorrect={false} placeholder="git@github.com:you/prompts.git" placeholderTextColor={colors.foregroundMuted} style={{ ...inputStyle(colors), backgroundColor: colors.surface0, fontFamily: "monospace", fontSize: 13 }} />
+              </Field>
+              <Field label="Branch" hint="Leave blank to use the remote's default branch." colors={colors}>
+                <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
+                  <TextInput accessibilityLabel="Git branch" value={branch} onChangeText={setBranch} editable={!blocked} autoCapitalize="none" autoCorrect={false} placeholder="Remote default" placeholderTextColor={colors.foregroundMuted} style={{ ...inputStyle(colors), backgroundColor: colors.surface0, flex: 1, width: undefined, fontFamily: "monospace", fontSize: 13 }} />
+                  <Button title={!status.initialized ? "Set up" : !status.remote ? "Connect" : remote.trim() ? "Update" : "Disconnect"} icon={status.initialized ? "Link" : "GitBranchPlus"} variant={status.initialized ? "secondary" : "primary"} onPress={onInit} colors={colors} disabled={blocked || (status.initialized && !connectionChanged)} />
+                </View>
+              </Field>
               {status.initialized && (
-                <View style={{ flexDirection: "row", justifyContent: "flex-end" }}>
-                  <Button title="Sync now" icon="RefreshCw" variant="primary" onPress={onSync} colors={colors} disabled={busy || configDirty} />
+                <View style={{ flexDirection: "row", justifyContent: "flex-end", alignItems: "center", gap: 10 }}>
+                  {syncState?.lastSyncedAt && <Text style={{ color: colors.foregroundMuted, fontSize: 12 }}>Last synced {relativeTime(syncState.lastSyncedAt)}</Text>}
+                  <Button title={syncState?.running ? "Syncing…" : "Sync now"} icon="RefreshCw" variant="primary" onPress={onSync} colors={colors} disabled={blocked || connectionChanged || Boolean(syncState?.running)} />
                 </View>
               )}
               {configDirty && <Meta colors={colors} icon="TriangleAlert">Save settings before running Git actions.</Meta>}
             </>
           )}
+        </Card>
+      )}
+      {settings?.gitEnabled && status?.initialized && (
+        <Card colors={colors}>
+          <SectionTitle title="When to sync" subtitle="Each sync commits prompt changes, merges changes from the remote, and pushes." colors={colors} icon="Clock" />
+          <SyncModePicker colors={colors} mode={settings.syncMode} interval={settings.syncInterval} disabled={blocked} onChange={onSyncMode} />
+          {settings.syncMode === "interval" && syncState?.nextSyncAt && <Meta colors={colors} icon="Clock">Next sync {new Date(syncState.nextSyncAt).toLocaleTimeString()}</Meta>}
         </Card>
       )}
     </ScrollView>

@@ -1,4 +1,5 @@
 import { Icon, ScrollView, TextInput } from "@getpaseo/plugin/client/react-native";
+import type { ReactNode } from "react";
 import { Pressable, Text, View } from "react-native";
 import type { Prompt } from "../shared/prompts";
 import { FolderPicker } from "./editor";
@@ -31,10 +32,11 @@ type Props = {
   setNewFolder: (value: string) => void;
   onCreateFolder: () => void;
   root: string | undefined;
+  footer?: ReactNode;
 };
 
 export function LibrarySidebar(props: Props) {
-  const { colors, compact, disabled, query, setQuery, archived, setArchived, filterFolder, setFilterFolder, filterTag, setFilterTag, organize, setOrganize, folders, tags, prompts, loading, currentId, onOpen, onRefresh, newFolder, setNewFolder, onCreateFolder, root } = props;
+  const { colors, compact, disabled, query, setQuery, archived, setArchived, filterFolder, setFilterFolder, filterTag, setFilterTag, organize, setOrganize, folders, tags, prompts, loading, currentId, onOpen, onRefresh, newFolder, setNewFolder, onCreateFolder, root, footer } = props;
   const filtered = filterFolder !== undefined || filterTag !== undefined || archived || query !== "";
   const count = prompts?.length ?? 0;
   return (
@@ -79,6 +81,7 @@ export function LibrarySidebar(props: Props) {
           </View>
         )}
       </ScrollView>
+      {footer}
       {root && <Meta colors={colors} icon="HardDrive">{root}</Meta>}
     </View>
   );
