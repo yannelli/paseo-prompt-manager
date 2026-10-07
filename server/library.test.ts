@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, readdir, rm, symlink, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -112,7 +112,7 @@ test("searches content, includes archived on request, and reloads chosen setting
   assert.equal((await library.list()).length, 1);
   assert.equal((await library.list({ archived: true })).length, 2);
   const reopened = new PromptLibrary(join(base, "settings.json"));
-  assert.deepEqual(await reopened.settings(), { directory: root, gitEnabled: false });
+  assert.deepEqual(await reopened.settings(), { directory: root, gitEnabled: false, syncMode: "manual", syncInterval: 15 });
   const other = join(base, "other");
   await library.configure({ directory: other, gitEnabled: true });
   assert.equal((await reopened.settings()).directory, other);
@@ -475,4 +475,35 @@ test("attachment search previews the first four body lines after the title", asy
   const [headingOnly, steps] = (await library.search("")).items;
   assert.equal(steps!.subtitle, "Read the diff. Check tests Keep it small npm test");
   assert.equal(headingOnly!.subtitle, "Use for headings");
+});
+
+test("list reuses unchanged prompts and notices external edits of the same size", async (t) => {
+  const { library, root } = await fixture(t);
+  await create(library, "# One\nFirst body.");
+  const first = (await library.list())[0]!;
+  await writeFile(join(root, "code-review.md"), "# Two\nFirst body.");
+  await utimes(join(root, "code-review.md"), new Date(first.updatedAt), new Date(Date.parse(first.updatedAt) + 5_000));
+  const edited = (await library.list())[0]!;
+  assert.equal(edited.title, "Two");
+  assert.notEqual(edited.revision, first.revision);
+  await rm(join(root, "code-review.md"));
+  assert.deepEqual(await library.list(), []);
+  assert.equal((await library.list({ archived: true }))[0]!.archived, true);
+});
+
+test("keeps sync preferences when settings omit them and rejects invalid values", async (t) => {
+  const { library, base, root } = await fixture(t);
+  const changes: string[] = [];
+  library.onChange = () => changes.push("change");
+  assert.deepEqual(await library.configure({ directory: root, gitEnabled: true, syncMode: "interval", syncInterval: 30 }),
+    { directory: root, gitEnabled: true, syncMode: "interval", syncInterval: 30 });
+  assert.deepEqual(await library.configure({ directory: root, gitEnabled: true }), { directory: root, gitEnabled: true, syncMode: "interval", syncInterval: 30 });
+  await assert.rejects(library.configure({ directory: root, gitEnabled: true, syncInterval: 0 }), /Invalid prompt library settings/);
+  await writeFile(join(base, "settings.json"), JSON.stringify({ directory: root, gitEnabled: false, syncMode: "hourly" }));
+  await assert.rejects(library.settings(), /Invalid prompt library settings/);
+  await writeFile(join(base, "settings.json"), JSON.stringify({ directory: root, gitEnabled: false }));
+  assert.equal((await library.settings()).syncMode, "manual");
+  await create(library);
+  await library.list();
+  assert.deepEqual(changes, ["change"]);
 });

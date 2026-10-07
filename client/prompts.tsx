@@ -1,8 +1,8 @@
 import type { PluginAgentPanelProps, PluginSurfaceProps } from "@getpaseo/plugin/client";
 import { usePaseo, useRpc } from "@getpaseo/plugin/client";
 import { Icon, ScrollView, TextInput, useToast } from "@getpaseo/plugin/client/react-native";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRef, useState } from "react";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { MarkdownPreview } from "./markdown";
 import { FolderPicker, FolderBreadcrumb } from "./editor";
@@ -10,12 +10,15 @@ import { VersionHistory } from "./history";
 import { ImportPrompts } from "./import";
 import { LibrarySettingsScreen } from "./settings";
 import { LibrarySidebar } from "./sidebar";
-import { Banner, Button, Card, Chip, ConfirmModal, EmptyState, Field, IconButton, Meta, Segmented, StatusDot, Tip, inputStyle, radius, relativeTime, row, wordCount } from "./ui";
+import { SyncBadge, describeMode } from "./sync";
+import { Banner, Button, Card, Chip, ConfirmModal, EmptyState, Field, IconButton, Meta, Segmented, StatusDot, Tip, inputStyle, radius, relativeTime, row, useDebounced, wordCount } from "./ui";
 import {
-  archivePrompt, createFolder, listFolders, getGitStatus, getSettings, initGit, listPrompts, listVersions,
-  readPrompt, readVersion, restoreVersion, savePrompt, saveSettings, syncGit,
-  type Prompt,
+  archivePrompt, createFolder, listFolders, getGitStatus, getSettings, getSyncState, initGit, listPrompts, listVersions,
+  openSync, readPrompt, readVersion, restoreVersion, savePrompt, saveSettings, syncGit,
+  type Prompt, type SyncMode,
 } from "../shared/prompts";
+
+const FRESH_MS = 30_000;
 
 type Props = PluginSurfaceProps & { agentId?: string };
 
@@ -42,6 +45,8 @@ export function PromptLibrary({ theme, layout, agentId }: Props) {
   const gitStatusRpc = useRpc(getGitStatus);
   const initRpc = useRpc(initGit);
   const syncRpc = useRpc(syncGit);
+  const syncStateRpc = useRpc(getSyncState);
+  const openSyncRpc = useRpc(openSync);
   const [query, setQuery] = useState("");
   const [archived, setArchived] = useState(false);
   const [mode, setMode] = useState<"list" | "editor" | "settings" | "import">("list");
@@ -63,18 +68,25 @@ export function PromptLibrary({ theme, layout, agentId }: Props) {
   const [directory, setDirectory] = useState("");
   const [gitEnabled, setGitEnabled] = useState(false);
   const [remote, setRemote] = useState("");
+  const [branch, setBranch] = useState("");
   const [pending, setPending] = useState<(() => void) | null>(null);
   const [archiveConfirm, setArchiveConfirm] = useState(false);
   const operationLock = useRef(false);
 
   const settings = useQuery({ queryKey: ["prompt-settings"], queryFn: () => settingsRpc({}) });
   const root = settings.data?.directory;
-  const folders = useQuery({ queryKey: ["prompt-folders", root], queryFn: () => foldersRpc({}), enabled: Boolean(root) });
-  const tagSources = useQuery({ queryKey: ["prompt-library", root, "tags", archived], queryFn: () => listRpc({ archived }), enabled: Boolean(root) });
+  const searchQuery = useDebounced(query, 200);
+  const folders = useQuery({ queryKey: ["prompt-folders", root], queryFn: () => foldersRpc({}), enabled: Boolean(root), staleTime: FRESH_MS });
+  // Shares the unfiltered list query, so tags cost no extra request until a filter is applied.
+  const tagSources = useQuery({
+    queryKey: ["prompt-library", root, "", archived, undefined, undefined],
+    queryFn: () => listRpc({ query: "", archived }), enabled: Boolean(root), staleTime: FRESH_MS,
+  });
   const availableTags = [...new Set(tagSources.data?.flatMap((prompt) => prompt.tags) ?? [])].sort();
   const prompts = useQuery({
-    queryKey: ["prompt-library", root, query, archived, filterFolder, filterTag],
-    queryFn: () => listRpc({ query, archived, folder: filterFolder, tag: filterTag }), enabled: Boolean(root),
+    queryKey: ["prompt-library", root, searchQuery, archived, filterFolder, filterTag],
+    queryFn: () => listRpc({ query: searchQuery, archived, folder: filterFolder, tag: filterTag }), enabled: Boolean(root),
+    staleTime: FRESH_MS, placeholderData: keepPreviousData,
   });
   const versions = useQuery({
     queryKey: ["prompt-versions", root, current?.id],
@@ -89,6 +101,29 @@ export function PromptLibrary({ theme, layout, agentId }: Props) {
     queryKey: ["prompt-git", root], queryFn: () => gitStatusRpc({}),
     enabled: mode === "settings" && Boolean(settings.data?.gitEnabled),
   });
+  const gitEnabledSaved = Boolean(settings.data?.gitEnabled);
+  const syncState = useQuery({
+    queryKey: ["prompt-sync", root], queryFn: () => syncStateRpc({}), enabled: gitEnabledSaved,
+    refetchInterval: (state) => state.state.data?.running ? 2_000 : state.state.data?.mode === "manual" ? false : 30_000,
+  });
+  const lastSyncedAt = syncState.data?.lastSyncedAt;
+  const seenSync = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    // A sync can pull prompts from the remote, so reload lists whenever a new sync lands.
+    if (seenSync.current !== undefined && lastSyncedAt !== seenSync.current) void refresh();
+    seenSync.current = lastSyncedAt;
+  }, [lastSyncedAt]);
+  const listed = prompts.isSuccess;
+  useEffect(() => {
+    // Wait for the first list so the background pull never delays it.
+    if (!gitEnabledSaved || !root || !listed) return;
+    openSyncRpc({}).then((state) => cache.setQueryData(["prompt-sync", root], state)).catch(() => undefined);
+  }, [gitEnabledSaved, root, listed]);
+  useEffect(() => {
+    if (mode !== "settings" || !git.data) return;
+    setRemote(git.data.remote);
+    setBranch(git.data.branch);
+  }, [mode, git.data?.remote, git.data?.branch]);
   const mutation = useMutation({
     mutationFn: async (action: () => Promise<void>) => { await action(); },
     onSettled: () => { operationLock.current = false; },
@@ -133,6 +168,7 @@ export function PromptLibrary({ theme, layout, agentId }: Props) {
       cache.invalidateQueries({ queryKey: ["prompt-versions"] }),
       cache.invalidateQueries({ queryKey: ["prompt-folders"] }),
       cache.invalidateQueries({ queryKey: ["prompt-git"] }),
+      cache.invalidateQueries({ queryKey: ["prompt-sync"] }),
     ]);
   };
   const success = (message: string) => toast.show(message, { variant: "success" });
@@ -141,8 +177,15 @@ export function PromptLibrary({ theme, layout, agentId }: Props) {
   const openSettings = () => guard(() => {
     setDirectory(settings.data?.directory ?? "");
     setGitEnabled(settings.data?.gitEnabled ?? false);
-    setRemote("");
+    setRemote(git.data?.remote ?? "");
+    setBranch(git.data?.branch ?? "");
     setMode("settings");
+  });
+  const syncNow = () => run(async () => {
+    const result = await syncRpc({});
+    cache.setQueryData(["prompt-git", root], result);
+    await refresh();
+    success(result.message);
   });
   const openPrompt = (id: string) => guard(() => run(async () => accept(await readRpc({ id }))));
   const createFolderAt = (parent: string, assign: (path: string) => void) => run(async () => {
@@ -354,6 +397,9 @@ export function PromptLibrary({ theme, layout, agentId }: Props) {
           setGitEnabled={setGitEnabled}
           remote={remote}
           setRemote={setRemote}
+          branch={branch}
+          setBranch={setBranch}
+          syncState={syncState.data}
           configDirty={configDirty}
           onBack={() => guard(() => setMode(current || draftDirty ? "editor" : "list"))}
           onSave={() => run(async () => {
@@ -366,16 +412,18 @@ export function PromptLibrary({ theme, layout, agentId }: Props) {
             success("Settings saved.");
           })}
           onInit={() => run(async () => {
-            const result = await initRpc({ remote });
+            // An untouched branch field lets the server pick the remote's default branch.
+            const result = await initRpc({ remote, branch: branch.trim() === (git.data?.branch ?? "") ? "" : branch });
             cache.setQueryData(["prompt-git", root], result);
-            setRemote("");
+            await cache.invalidateQueries({ queryKey: ["prompt-sync"] });
             success(result.message);
           })}
-          onSync={() => run(async () => {
-            const result = await syncRpc({});
-            cache.setQueryData(["prompt-git", root], result);
-            await refresh();
-            success(result.message);
+          onSync={syncNow}
+          onSyncMode={(syncMode: SyncMode, syncInterval: number) => run(async () => {
+            const result = await configureRpc({ ...settings.data!, syncMode, syncInterval });
+            cache.setQueryData(["prompt-settings"], result);
+            await cache.invalidateQueries({ queryKey: ["prompt-sync"] });
+            success(describeMode(result.syncMode, result.syncInterval));
           })}
         />
       ) : (
@@ -409,6 +457,7 @@ export function PromptLibrary({ theme, layout, agentId }: Props) {
               setNewFolder={setNewFolder}
               onCreateFolder={() => newFolder.trim() && createFolderAt(filterFolder ?? "", setFilterFolder)}
               root={root}
+              footer={gitEnabledSaved && syncState.data?.initialized ? <SyncBadge colors={colors} state={syncState.data} disabled={locked} onSync={syncNow} /> : undefined}
             />
           )}
           {showMain && <View style={{ flex: 1, minWidth: 0, minHeight: 0 }}>{mode === "list" ? welcome : editor}</View>}

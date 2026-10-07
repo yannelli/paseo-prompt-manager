@@ -1,12 +1,12 @@
 import type { PluginButtonContentProps, PluginButtonRegistration, PluginClientContext } from "@getpaseo/plugin/client";
 import { usePaseo, useRpc } from "@getpaseo/plugin/client";
 import { Icon, ScrollView, TextInput, useToast } from "@getpaseo/plugin/client/react-native";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { previewLines } from "../shared/markdown";
 import { searchPrompts } from "../shared/prompts";
-import { inputStyle, radius } from "./ui";
+import { inputStyle, radius, useDebounced } from "./ui";
 
 const RESULT_LIMIT = 20;
 
@@ -18,7 +18,8 @@ function PromptPicker({ theme, layout, close, ...target }: PluginButtonContentPr
   const toast = useToast();
   const searchRpc = useRpc(searchPrompts);
   const [query, setQuery] = useState("");
-  const results = useQuery({ queryKey: ["prompt-pill", query.trim()], queryFn: () => searchRpc({ query: query.trim() }) });
+  const search = useDebounced(query.trim(), 200);
+  const results = useQuery({ queryKey: ["prompt-pill", search], queryFn: () => searchRpc({ query: search }), placeholderData: keepPreviousData });
   const send = useMutation({
     mutationFn: async (item: { title: string; text: string }) => {
       if (target.context !== "agent") throw new Error("Open this from an agent composer.");

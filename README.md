@@ -74,12 +74,17 @@ Preferences live at `~/.config/paseo/prompt-manager.json`. If `XDG_CONFIG_HOME` 
 
 ## Optional Git sync
 
-1. Configure your Git author name, email, and remote credentials on the daemon host.
+1. Configure your Git author name, email, and remote credentials on the daemon host. Background sync cannot answer password or passphrase prompts, so use a credential helper or an SSH agent.
 2. Turn **Git sync** on in library settings and save.
-3. Choose **Initialize**. Supply an origin URL to sync with a remote, or leave it blank for local Git checkpoints.
-4. Choose **Sync now** to commit prompt files and version history, fetch the remote branch, fast-forward, and push.
+3. Paste a remote URL, such as `git@github.com:you/prompts.git`, and choose **Set up**. The repository can be empty or already hold prompts from another machine. Leave the branch blank to use the remote's default branch. Leave the URL blank for local Git checkpoints only.
+4. Under **When to sync**, choose a mode:
+   - **Manual**: sync only when you choose **Sync now**.
+   - **Automatic**: sync a few seconds after each change.
+   - **Scheduled**: sync every 5, 15, 30, or 60 minutes.
 
-Sync runs when requested. Branch divergence stops the sync and leaves local commits intact. Resolve it with Git, then sync again. The library must be the repository root. Unrelated staged files block sync.
+Automatic and scheduled modes also pull when you open the library. Each sync commits prompt files and version history, merges the remote branch, and pushes. Edits to different prompts on two machines merge. If both machines change the same prompt, sync stops, leaves local commits intact, and shows the error in the sidebar and settings. Resolve the conflict with Git, then sync again. The library must be the repository root. Unrelated staged files block sync.
+
+You can change the remote URL or branch later in settings. Clearing the URL disconnects the remote.
 
 ## Screenshots
 
