@@ -24,7 +24,7 @@ async function git(root: string, args: string[]) {
     const result = await execute("git", ["-c", "core.hooksPath=/dev/null", "-C", root, ...args], {
       timeout: 30_000,
       maxBuffer: 2 * 1024 * 1024,
-      env: { ...process.env, GIT_TERMINAL_PROMPT: "0", GIT_EDITOR: "true" },
+      env: { ...process.env, GIT_TERMINAL_PROMPT: "0", GIT_EDITOR: "true", GIT_SSH_COMMAND: process.env.GIT_SSH_COMMAND ?? "ssh -o BatchMode=yes" },
     });
     return result.stdout.trim();
   } catch (error) {
@@ -33,13 +33,23 @@ async function git(root: string, args: string[]) {
   }
 }
 
-async function isRepository(root: string) {
+async function attempt(root: string, args: string[]) {
+  try { return await git(root, args); } catch { return null; }
+}
+
+/** Cheap check for a repository at the library root, without running Git. */
+export async function hasRepository(root: string) {
   try {
     await lstat(join(root, ".git"));
+    return true;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
     throw error;
   }
+}
+
+async function isRepository(root: string) {
+  if (!await hasRepository(root)) return false;
   const top = await git(root, ["rev-parse", "--show-toplevel"]);
   if (await realpath(top) !== await realpath(root)) throw new Error("Choose a Git repository whose root is the prompt directory.");
   return true;
@@ -54,16 +64,45 @@ export async function gitStatus(root: string, message = "") {
   return { initialized: true, branch, remote, changes: status ? status.split("\n").length : 0, message };
 }
 
-export async function initializeGit(root: string, remote: string) {
+async function hasUpstream(root: string, branch: string) {
+  return Boolean(branch && await attempt(root, ["config", "--get", `branch.${branch}.remote`]));
+}
+
+async function remoteDefaultBranch(root: string) {
+  let refs: string;
+  try {
+    refs = await git(root, ["ls-remote", "--symref", "origin", "HEAD"]);
+  } catch (error) {
+    throw new Error(`Could not reach origin. Check the URL and this host's Git credentials. ${(error as Error).message}`);
+  }
+  return /^ref: refs\/heads\/(\S+)\s+HEAD$/m.exec(refs)?.[1] ?? "";
+}
+
+/** Creates the repository if needed, then points origin and the local branch at the chosen remote. */
+export async function initializeGit(root: string, remote: string, branch = "") {
   const url = remote.trim();
+  const wanted = branch.trim();
   if (url && (!/^(?:https:\/\/|ssh:\/\/|git@[a-zA-Z0-9.-]+:|\/)/.test(url) || /[\r\n\0]/.test(url))) {
     throw new Error("Use an HTTPS URL, SSH URL, git@host:path, or absolute local remote path.");
   }
+  if (wanted && (wanted.startsWith("-") || await attempt(root, ["check-ref-format", "--branch", wanted]) === null)) {
+    throw new Error("Enter a valid branch name, such as main.");
+  }
   if (!await isRepository(root)) await git(root, ["init", "--initial-branch=main"]);
   const status = await gitStatus(root);
-  if (url && status.remote && status.remote !== url) throw new Error("Origin already points elsewhere. Change it with Git before syncing.");
   if (url && !status.remote) await git(root, ["remote", "add", "origin", url]);
-  return gitStatus(root, "Git is ready. Sync commits prompt files and version history.");
+  else if (url && status.remote !== url) await git(root, ["remote", "set-url", "origin", url]);
+  else if (!url && status.remote) await git(root, ["remote", "remove", "origin"]);
+  // A branch that already tracks origin keeps its name when only the URL changes.
+  const detect = url && !wanted && !await hasUpstream(root, status.branch);
+  const target = wanted || (detect ? await remoteDefaultBranch(root) : "") || status.branch;
+  if (target && target !== status.branch) {
+    if (await attempt(root, ["rev-parse", "--verify", "--quiet", "HEAD"]) === null) await git(root, ["symbolic-ref", "HEAD", `refs/heads/${target}`]);
+    else await git(root, ["branch", "-m", status.branch, target]);
+  }
+  return gitStatus(root, url
+    ? `Connected to origin on ${target}. Sync merges prompts from both sides, then pushes.`
+    : "Git is ready for local checkpoints. Add a remote to sync across machines.");
 }
 
 async function managedFiles(root: string) {
@@ -80,7 +119,7 @@ async function managedFiles(root: string) {
   return [...new Set([...files, ...tracked])];
 }
 
-export async function synchronizeGit(root: string) {
+async function checkpoint(root: string) {
   const status = await gitStatus(root);
   if (!status.initialized) throw new Error("Initialize Git in the prompt directory first.");
   const staged = (await git(root, ["diff", "--cached", "--name-only", "-z"])).split("\0").filter(Boolean);
@@ -92,18 +131,36 @@ export async function synchronizeGit(root: string) {
   if (await git(root, ["diff", "--cached", "--name-only"])) {
     await git(root, ["commit", "-m", "Update prompt library"]);
   }
+  return status;
+}
+
+async function integrate(root: string, branch: string) {
+  const args = ["merge", "--no-edit", "-m", "Merge prompt library from origin", "FETCH_HEAD"];
+  if (await attempt(root, ["rev-parse", "--verify", "--quiet", "HEAD"]) !== null
+    && await attempt(root, ["merge-base", "HEAD", "FETCH_HEAD"]) === null
+    && !await hasUpstream(root, branch)) {
+    // First connection of a library that already has its own history.
+    args.splice(1, 0, "--allow-unrelated-histories");
+  }
+  try {
+    await git(root, args);
+  } catch (error) {
+    await attempt(root, ["merge", "--abort"]);
+    throw new Error(`Git sync stopped before merging origin. Resolve branch divergence with Git, then sync again. ${(error as Error).message}`);
+  }
+}
+
+type Exclusive = <T>(operation: () => Promise<T>) => Promise<T>;
+
+// Commits prompt files, merges origin's branch, and pushes. `exclusive` holds the library lock
+// for steps that touch the working tree; network steps run without it so prompts stay usable.
+export async function synchronizeGit(root: string, exclusive: Exclusive = (operation) => operation()) {
+  const status = await exclusive(() => checkpoint(root));
   if (!status.remote) return gitStatus(root, "Saved a local Git checkpoint. Add an origin remote to sync across machines.");
   const remoteRefs = await git(root, ["ls-remote", "--heads", "origin"]);
-  const branchExists = remoteRefs.split("\n").some((line) => line.endsWith(`refs/heads/${status.branch}`));
-  if (branchExists) {
+  if (remoteRefs.split("\n").some((line) => line.endsWith(`refs/heads/${status.branch}`))) {
     await git(root, ["fetch", "origin", status.branch]);
-    try {
-      await git(root, ["merge", "--ff-only", "FETCH_HEAD"]);
-    } catch (error) {
-      throw new Error(`Git sync stopped. Resolve branch divergence or local changes with Git, then sync again. ${(error as Error).message}`);
-    }
-  } else if (remoteRefs) {
-    throw new Error(`Origin has no ${status.branch} branch. Check out the remote library branch with Git before syncing.`);
+    await exclusive(() => integrate(root, status.branch));
   }
   await git(root, ["push", "--set-upstream", "origin", status.branch]);
   return gitStatus(root, "Synced with origin.");
