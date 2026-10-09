@@ -12,7 +12,8 @@ export function useKeyboardInset() {
   const measure = () => {
     const top = keyboardTop.current;
     if (top === null || !ref.current) return setInset(0);
-    ref.current.measureInWindow((_x, y, _width, height) => setInset(Math.max(0, Math.round(y + height - top))));
+    // A measurement that lands after the keyboard hid, or after it moved, must not reapply a stale inset.
+    ref.current.measureInWindow((_x, y, _width, height) => { if (keyboardTop.current === top) setInset(Math.max(0, Math.round(y + height - top))); });
   };
   useEffect(() => {
     if (!native) return;
