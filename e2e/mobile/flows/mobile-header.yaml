@@ -4,7 +4,7 @@ appId: sh.paseo
 - assertVisible: Markdown prompts shared across agents on this host\.
 - tapOn: Open Standup
 - extendedWaitUntil:
-    visible: Prompt Markdown
+    visible: Prompt Markdown.*
     timeout: 15000
 - assertNotVisible: Markdown prompts shared across agents on this host\.
 - assertNotVisible: Open Standup

@@ -3,10 +3,10 @@ appId: sh.paseo
 - runFlow: lib/open-library.yaml
 - tapOn: Import
 - extendedWaitUntil:
-    visible: Markdown file or folder paths
+    visible: Markdown file or folder paths.*
     timeout: 15000
 - tapOn: Select folder imported
-- tapOn: Markdown file or folder paths
+- tapOn: Markdown file or folder paths.*
 - inputText: ${IMPORT_FILE}
 - pressKey: Enter
 - inputText: ${IMPORT_DIR}

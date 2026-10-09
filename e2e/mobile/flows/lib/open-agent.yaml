@@ -14,6 +14,12 @@ appId: sh.paseo
     id: sidebar-close
 - waitForAnimationToEnd
 - openLink: paseo:///h/${SERVER_ID}/agent/${AGENT_ID}
+# iOS asks before a custom URL scheme opens the app.
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - tapOn: Open
 - extendedWaitUntil:
     visible: Send a saved prompt
     timeout: 90000

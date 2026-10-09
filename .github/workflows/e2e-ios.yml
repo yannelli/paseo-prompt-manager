@@ -24,7 +24,7 @@ jobs:
   ios:
     name: iOS simulator (Maestro)
     runs-on: macos-15
-    timeout-minutes: 90
+    timeout-minutes: 110
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
@@ -96,21 +96,17 @@ jobs:
           xcrun simctl install "$udid" "$app"
           xcrun simctl get_app_container "$udid" "$IOS_BUNDLE_ID"
 
-      - name: Smoke and probe
-        continue-on-error: true
-        run: |
-          maestro --version
-          node e2e/ios/smoke.ts
+      - run: maestro --version
 
       - name: Run the iOS E2E suite
-        timeout-minutes: 30
+        timeout-minutes: 75
         run: bash e2e/mobile/ci-run.sh
         env:
           PROMPT_E2E_PLATFORM: ios
           PROMPT_E2E_APP_ID: ${{ env.IOS_BUNDLE_ID }}
           PROMPT_E2E_DEVICE: ${{ env.SIM_UDID }}
           # Narrow a debugging run to scenarios whose title matches.
-          PROMPT_E2E_PATTERN: "focused editor field"
+          PROMPT_E2E_PATTERN: ""
 
       - if: ${{ !cancelled() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

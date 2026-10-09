@@ -3,7 +3,12 @@ appId: sh.paseo
 - runFlow: lib/open-library.yaml
 - assertVisible: Markdown prompts shared across agents on this host\.
 - assertVisible: Open Code review
-- assertVisible: Find bugs before merge
-- assertVisible: "#review"
+# iOS exposes a list row as one element labelled "Open <Title>"; its description and tags are not separate nodes.
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - assertVisible: Find bugs before merge
+      - assertVisible: "#review"
 - assertVisible: Open Summary
 - takeScreenshot: library-open

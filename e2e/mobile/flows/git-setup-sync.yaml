@@ -7,6 +7,8 @@ appId: sh.paseo
 - tapOn: Git remote URL
 - eraseText
 - inputText: ${REMOTE}
+# Without this the keyboard still covers the branch field when the scroll stops on iOS, and the tap lands on a key.
+- hideKeyboard
 - scrollUntilVisible:
     element: Git branch
     direction: DOWN

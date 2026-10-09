@@ -73,6 +73,8 @@ export async function screenshot(label: string): Promise<void> {
     const serial = target.serial ? ["-s", target.serial] : [];
     const { stdout } = await execute("adb", [...serial, "exec-out", "screencap", "-p"], { encoding: "buffer", maxBuffer: 64 * 1024 * 1024 });
     await writeFile(file, stdout);
+  } else {
+    await execute("xcrun", ["simctl", "io", target.serial ?? "booted", "screenshot", file]);
   }
 }
 
@@ -100,7 +102,15 @@ async function waitForIdle(timeoutMs = 180_000): Promise<void> {
 
 /** Screen size in pixels, the same coordinate space as the bounds Maestro reports. */
 export async function screenSize(): Promise<{ width: number; height: number }> {
-  if (platform !== "android") throw new Error("screenSize is implemented for Android only.");
+  if (platform === "ios") {
+    // iOS reports points. The screen is the biggest node that starts at the origin; some system
+    // layers report device pixels, so ignore anything wider than a phone in points.
+    const screen = (await hierarchy("screen-size"))
+      .flatMap((node) => (node.bounds && node.bounds.left === 0 && node.bounds.top === 0 && node.bounds.right < 1000 ? [node.bounds] : []))
+      .sort((a, b) => b.right * b.bottom - a.right * a.bottom)[0];
+    if (!screen) throw new Error("No node that starts at the screen origin in the iOS view hierarchy.");
+    return { width: screen.right, height: screen.bottom };
+  }
   const out = await adb(["shell", "wm", "size"]);
   const override = /Override size: (\d+)x(\d+)/.exec(out) ?? /Physical size: (\d+)x(\d+)/.exec(out);
   if (!override) throw new Error(`Cannot read the screen size from: ${out}`);
@@ -145,7 +155,8 @@ export async function hierarchy(label: string): Promise<UiNode[]> {
 
 /** First node whose resource id, label, text, or hint equals `name`. */
 export function find(nodes: UiNode[], name: string): UiNode | undefined {
-  return nodes.find((node) => node.id === name || node.label === name || node.text === name || node.hint === name);
+  // iOS folds a multiline field's placeholder into its label ("Prompt description When to use this prompt").
+  return nodes.find((node) => node.id === name || node.label === name || node.label.startsWith(`${name} `) || node.text === name || node.hint === name);
 }
 
 async function dump(label: string, args: string[]): Promise<string> {
@@ -155,9 +166,15 @@ async function dump(label: string, args: string[]): Promise<string> {
   return out;
 }
 
+/** Bounds of the iOS keyboard (the `inputView` container in the hierarchy), or null while it is down. */
+async function iosKeyboard(label: string): Promise<Bounds | null> {
+  const bounds = (await hierarchy(`${label}.keyboard`)).find((node) => node.id === "inputView")?.bounds;
+  return bounds && bounds.bottom > bounds.top ? bounds : null;
+}
+
 /** Whether the soft keyboard is up, from `dumpsys input_method`. Null where the platform has no such check. */
 export async function keyboardShown(label: string): Promise<boolean | null> {
-  if (platform !== "android") return null;
+  if (platform === "ios") return (await iosKeyboard(label)) !== null;
   const out = await dump(`${label}.input_method`, ["shell", "dumpsys", "input_method"]);
   const shown = /mInputShown=(true|false)/.exec(out);
   if (shown) return shown[1] === "true";
@@ -180,7 +197,11 @@ export async function waitForKeyboard(want: boolean, label: string, timeoutMs = 
 
 /** Top edge of the soft keyboard in screen pixels, from the touchable region of the InputMethod window. */
 export async function keyboardTop(label: string): Promise<number> {
-  if (platform !== "android") throw new Error("keyboardTop is implemented for Android only.");
+  if (platform === "ios") {
+    const keyboard = await iosKeyboard(label);
+    if (!keyboard) throw new Error(`The keyboard is not in the iOS view hierarchy (${label}).`);
+    return keyboard.top;
+  }
   const out = await dump(`${label}.windows`, ["shell", "dumpsys", "window", "windows"]);
   const lines = out.split("\n");
   const start = lines.findIndex((line) => /^\s*Window #\d+ Window\{[^}]*InputMethod\}/.test(line));

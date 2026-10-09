@@ -4,9 +4,9 @@ appId: sh.paseo
 - runFlow: lib/open-library.yaml
 - tapOn: Open Standup
 - extendedWaitUntil:
-    visible: Prompt Markdown
+    visible: Prompt Markdown.*
     timeout: 15000
-- tapOn: Prompt Markdown
+- tapOn: Prompt Markdown.*
 - runFlow: lib/select-all.yaml
 - eraseText
 - inputText: "# Standup"

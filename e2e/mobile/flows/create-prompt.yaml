@@ -8,9 +8,9 @@ appId: sh.paseo
 - tapOn: Prompt filename
 - inputText: release-notes
 - scrollUntilVisible:
-    element: Prompt description
+    element: Prompt description.*
     direction: DOWN
-- tapOn: Prompt description
+- tapOn: Prompt description.*
 - inputText: Draft release notes from merged PRs
 - scrollUntilVisible:
     element: Prompt tags
@@ -27,10 +27,10 @@ appId: sh.paseo
     visible: Select folder team/docs
     timeout: 15000
 - scrollUntilVisible:
-    element: Prompt Markdown
+    element: Prompt Markdown.*
     direction: DOWN
     visibilityPercentage: 20
-- tapOn: Prompt Markdown
+- tapOn: Prompt Markdown.*
 - inputText: "# Release notes"
 - pressKey: Enter
 - pressKey: Enter

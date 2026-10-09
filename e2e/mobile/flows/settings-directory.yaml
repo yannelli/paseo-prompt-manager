@@ -7,6 +7,12 @@ appId: sh.paseo
     visible: Prompt library directory
     timeout: 15000
 - tapOn: Prompt library directory
+# iOS has no select-all hook; a triple tap selects the whole single-line path.
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - tripleTapOn: Prompt library directory
 - runFlow: lib/select-all.yaml
 - eraseText
 - inputText: ${OTHER_DIR}

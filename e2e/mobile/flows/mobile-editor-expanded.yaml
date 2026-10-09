@@ -11,7 +11,7 @@ appId: sh.paseo
     visible: Collapse editor
     timeout: 15000
 - assertNotVisible: Hide keyboard
-- tapOn: Prompt Markdown
+- tapOn: Prompt Markdown.*
 - extendedWaitUntil:
     visible: Hide keyboard
     timeout: 15000

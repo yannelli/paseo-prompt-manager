@@ -1,6 +1,0 @@
-appId: sh.paseo
----
-- tapOn: "Search prompts"
-- inputText: "abc"
-- waitForAnimationToEnd
-- takeScreenshot: probe-keyboard
