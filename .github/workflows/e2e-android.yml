@@ -127,7 +127,7 @@ jobs:
           PROMPT_E2E_APP_ID: ${{ steps.apk.outputs.package }}
           PROMPT_E2E_APP_PATH: ${{ steps.apk.outputs.path }}
           # Narrow a debugging run to scenarios whose title matches, for example "composer pill".
-          PROMPT_E2E_PATTERN: "connects|focused editor"
+          PROMPT_E2E_PATTERN: ""
         with:
           api-level: ${{ env.ANDROID_API }}
           target: ${{ env.ANDROID_TARGET }}
