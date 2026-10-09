@@ -26,13 +26,17 @@
     "node": ">=24"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p e2e",
     "test": "node --experimental-strip-types --test server/*.test.ts test/*.test.mjs",
     "check": "npm run typecheck && npm test",
-    "release:dry-run": "node scripts/release.mjs --dry-run"
+    "release:dry-run": "node scripts/release.mjs --dry-run",
+    "e2e:web": "playwright test --project web --project web-compact",
+    "e2e:desktop": "playwright test --project desktop"
   },
   "devDependencies": {
+    "@getpaseo/cli": "0.11.1",
     "@getpaseo/plugin": "0.11.0-beta.3",
+    "@playwright/test": "1.62.1",
     "@tanstack/react-query": "^5.90.11",
     "@types/node": "^26.4.1",
     "@types/react": "~19.2.0",

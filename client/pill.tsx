@@ -50,7 +50,7 @@ function PromptPicker({ theme, layout, close, ...target }: PluginButtonContentPr
     </Pressable>
   ));
   return (
-    <View style={{ width: layout.compact ? "100%" : 280, flexShrink: 1, minHeight: 0, gap: 8 }}>
+    <View testID="prompt-picker" style={{ width: layout.compact ? "100%" : 280, flexShrink: 1, minHeight: 0, gap: 8 }}>
       <TextInput accessibilityLabel="Search saved prompts" value={query} onChangeText={setQuery} autoFocus={!layout.compact} autoCapitalize="none" autoCorrect={false} placeholder="Search prompts" placeholderTextColor={colors.foregroundMuted} style={{ ...inputStyle(colors), paddingVertical: 7, fontSize: 13 }} />
       {results.isLoading && <Text style={muted}>Loading…</Text>}
       {results.error && <Text style={{ ...muted, color: colors.statusDanger }}>{results.error.message}</Text>}
