@@ -6,15 +6,15 @@ A Markdown prompt library for [Paseo](https://paseo.sh). Create, edit, search, a
 
 ## Install
 
-Enable plugins in **Settings → Plugins**, then install the beta from npm:
+Enable plugins in **Settings → Plugins**, then install from npm:
 
 ```sh
-paseo plugin add npm:@yannelli/paseo-prompt-manager@beta
+paseo plugin add npm:@yannelli/paseo-prompt-manager
 ```
 
-The beta requires Paseo `0.11.0-beta.3` or later on the daemon and on each app that shows the plugin. Git sync also requires Git on the daemon host.
+The plugin requires Paseo `0.11.0-beta.3` or later on the daemon and on each app that shows it. Git sync also requires Git on the daemon host.
 
-For Paseo 0.9 and 0.10, install `npm:@yannelli/paseo-prompt-manager`, which holds release 0.2.0. For Paseo 0.8, install 0.2.0 from Git with `paseo plugin add yannelli/paseo-prompt-manager --ref v0.2.0`.
+For Paseo 0.9 and 0.10, install release 0.2.0 with `paseo plugin add npm:@yannelli/paseo-prompt-manager@0.2.0`. For Paseo 0.8, install 0.2.0 from Git with `paseo plugin add yannelli/paseo-prompt-manager --ref v0.2.0`.
 
 Open **Prompts** in the sidebar to manage your library. Paseo provides the plugin's runtime dependencies.
 
