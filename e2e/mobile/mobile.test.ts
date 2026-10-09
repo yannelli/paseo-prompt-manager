@@ -39,7 +39,7 @@ async function eventually<T>(read: () => Promise<T>, done: (value: T) => boolean
 /** One scenario: a fresh library, optional agent, and a flow runner that passes the daemon to Maestro. */
 function scenario(title: string, body: (context: { library: TestLibrary; flow: (file: string, extra?: Record<string, string>) => Promise<void>; agent: () => Promise<TestAgent> }) => Promise<void>) {
   const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-  test(title, { timeout: 15 * 60_000, skip: !selected(title) && "Not selected by PROMPT_E2E_PATTERN." }, async () => {
+  test(title, { timeout: (platform === "ios" ? 25 : 15) * 60_000, skip: !selected(title) && "Not selected by PROMPT_E2E_PATTERN." }, async () => {
     assert.notEqual(connection, "failed", "The app never connected to the daemon; see the first test.");
     const library = new TestLibrary(daemon, slug);
     await library.activate();

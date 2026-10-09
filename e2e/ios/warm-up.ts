@@ -4,7 +4,7 @@ import { spawn } from "node:child_process";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { maestroBin, maestroEnv, maestroTarget } from "../mobile/config.ts";
-import { resetMaestroDriver, stopIosDriver } from "../mobile/device.ts";
+import { rebootSimulator, stopIosDriver } from "../mobile/device.ts";
 import { flowEnded } from "../mobile/maestro.ts";
 
 const ATTEMPTS = 2;
@@ -43,7 +43,7 @@ for (let index = 1; index <= ATTEMPTS; index++) {
     await stopIosDriver();
     process.exit(0);
   }
-  await resetMaestroDriver();
+  await rebootSimulator();
 }
 console.error("Maestro's iOS driver never became usable on this simulator.");
 process.exit(1);

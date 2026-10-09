@@ -83,18 +83,18 @@ export async function stopIosDriver(): Promise<void> {
   await execute("pkill", ["-f", "xcodebuild|maestro-driver|maestro_xctestrunner"]).catch(() => undefined);
 }
 
+/** Restarts the simulator (app data stays) after a driver that never answered left xcodebuild wedged. */
+export async function rebootSimulator(): Promise<void> {
+  const udid = target.serial ?? "booted";
+  await stopIosDriver();
+  if (udid === "booted") return;
+  await execute("xcrun", ["simctl", "shutdown", udid]).catch(() => undefined);
+  await execute("xcrun", ["simctl", "bootstatus", udid, "-b"], { timeout: 300_000 });
+}
+
 /** Stops a Maestro driver that a killed run left behind, so the next run starts it clean. */
 export async function resetMaestroDriver(): Promise<void> {
-  if (platform === "ios") {
-    // A driver that never answered leaves xcodebuild wedged; stop it and restart the simulator (app data stays).
-    const udid = target.serial ?? "booted";
-    await stopIosDriver();
-    if (udid !== "booted") {
-      await execute("xcrun", ["simctl", "shutdown", udid]).catch(() => undefined);
-      await execute("xcrun", ["simctl", "bootstatus", udid, "-b"], { timeout: 300_000 });
-    }
-    return;
-  }
+  if (platform === "ios") return stopIosDriver();
   if (platform !== "android") return;
   for (const name of ["dev.mobile.maestro", "dev.mobile.maestro.test"]) await adb(["shell", "am", "force-stop", name]).catch(() => undefined);
   await adb(["forward", "--remove-all"]).catch(() => undefined);
