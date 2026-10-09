@@ -1,30 +1,15 @@
 # Temporary iOS pipeline smoke; removed once the shared mobile suite runs on iOS.
 appId: sh.paseo
 ---
-- launchApp:
-    clearState: true
+- runFlow: ../mobile/flows/connect.yaml
 - extendedWaitUntil:
     visible:
-      id: "welcome-screen"
-    timeout: 60000
+      id: "menu-button"
+    timeout: 90000
 - tapOn:
-    id: "welcome-direct-connection"
-- extendedWaitUntil:
-    visible:
-      id: "add-host-modal"
-    timeout: 10000
+    id: "menu-button"
 - tapOn:
-    id: "direct-host-input"
-- eraseText
-- inputText: ${MAESTRO_E2E_ENDPOINT}
-- hideKeyboard
-- tapOn:
-    id: "direct-host-submit"
-- extendedWaitUntil:
-    visible: "Open menu"
-    timeout: 60000
-- tapOn: "Open menu"
-- tapOn: "Prompts"
+    id: "plugin-sidebar-paseo-prompt-manager-library"
 - extendedWaitUntil:
     visible:
       id: "prompt-library"

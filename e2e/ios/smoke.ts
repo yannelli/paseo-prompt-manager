@@ -1,5 +1,6 @@
 // Temporary iOS pipeline smoke: harness daemon + seeded prompt + Maestro flow.
 import { spawnSync } from "node:child_process";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { startDaemon } from "../harness/daemon.ts";
 import { TestLibrary } from "../harness/library.ts";
@@ -12,10 +13,18 @@ try {
   await library.seed("smoke", { content: "# Smoke prompt\n\nSmoke body", description: "d" });
   const result = spawnSync(
     "maestro",
-    ["test", "--debug-output", join(import.meta.dirname, "../.results/maestro"), join(import.meta.dirname, "smoke.yaml")],
-    { stdio: "inherit", env: { ...process.env, MAESTRO_E2E_ENDPOINT: daemon.endpoint } },
+    ["test", "-e", "HOST=127.0.0.1", "-e", `PORT=${daemon.port}`, "--debug-output", join(import.meta.dirname, "../.results/maestro"), join(import.meta.dirname, "smoke.yaml")],
+    { stdio: "inherit", },
   );
   status = result.status ?? 1;
+  // Exploration: capture the iOS view hierarchy with and without the keyboard.
+  const results = join(import.meta.dirname, "../.results/probe");
+  const run = (args: string[]) => spawnSync("maestro", args, { encoding: "utf8", env: { ...process.env, MAESTRO_CLI_NO_ANALYTICS: "1" } });
+  await mkdir(results, { recursive: true });
+  await writeFile(join(results, "hierarchy-before.json"), run(["hierarchy"]).stdout);
+  await writeFile(join(results, "probe-flow.txt"), String(run(["test", join(import.meta.dirname, "probe.yaml")]).stdout));
+  await writeFile(join(results, "hierarchy-keyboard.json"), run(["hierarchy"]).stdout);
+  spawnSync("xcrun", ["simctl", "io", "booted", "screenshot", join(results, "keyboard.png")]);
 } finally {
   await daemon.stop();
 }

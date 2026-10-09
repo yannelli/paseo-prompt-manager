@@ -1,0 +1,4 @@
+appId: sh.paseo
+---
+- tapOn: "Search prompts"
+- waitForAnimationToEnd
