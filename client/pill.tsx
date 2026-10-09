@@ -33,6 +33,22 @@ function PromptPicker({ theme, layout, close, ...target }: PluginButtonContentPr
   });
   const items = results.data?.items.slice(0, RESULT_LIMIT) ?? [];
   const muted = { color: colors.foregroundMuted, fontSize: 12 };
+  const rows = items.map((item) => (
+    <Pressable
+      key={item.id}
+      accessibilityRole="button"
+      accessibilityLabel={`Send ${item.title}`}
+      disabled={send.isPending}
+      onPress={() => send.mutate(item)}
+      style={({ pressed }) => ({ gap: 2, paddingVertical: 6, paddingHorizontal: 8, borderRadius: radius - 4, backgroundColor: pressed ? colors.surface2 : "transparent", opacity: send.isPending ? 0.5 : 1 })}
+    >
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+        <Text numberOfLines={1} style={{ color: colors.foreground, fontSize: 13, fontWeight: "600", flex: 1, minWidth: 0 }}>{item.title}</Text>
+        <Icon name="Send" size={12} color={colors.foregroundMuted} />
+      </View>
+      <Text numberOfLines={4} style={{ ...muted, lineHeight: 16 }}>{previewLines(item.text).join("\n") || item.subtitle}</Text>
+    </Pressable>
+  ));
   return (
     <View style={{ width: layout.compact ? "100%" : 280, flexShrink: 1, minHeight: 0, gap: 8 }}>
       <TextInput accessibilityLabel="Search saved prompts" value={query} onChangeText={setQuery} autoFocus={!layout.compact} autoCapitalize="none" autoCorrect={false} placeholder="Search prompts" placeholderTextColor={colors.foregroundMuted} style={{ ...inputStyle(colors), paddingVertical: 7, fontSize: 13 }} />
@@ -40,24 +56,11 @@ function PromptPicker({ theme, layout, close, ...target }: PluginButtonContentPr
       {results.error && <Text style={{ ...muted, color: colors.statusDanger }}>{results.error.message}</Text>}
       {send.error && <Text style={{ ...muted, color: colors.statusDanger }}>{send.error.message}</Text>}
       {results.data && items.length === 0 && <Text style={muted}>{query.trim() ? "No matching prompts." : "No saved prompts yet."}</Text>}
-      <ScrollView keyboardShouldPersistTaps="handled" style={{ flexGrow: 0, flexShrink: 1, maxHeight: layout.compact ? 320 : 360, minHeight: 0 }} contentContainerStyle={{ gap: 8 }}>
-      {items.map((item) => (
-        <Pressable
-          key={item.id}
-          accessibilityRole="button"
-          accessibilityLabel={`Send ${item.title}`}
-          disabled={send.isPending}
-          onPress={() => send.mutate(item)}
-          style={({ pressed }) => ({ gap: 2, paddingVertical: 6, paddingHorizontal: 8, borderRadius: radius - 4, backgroundColor: pressed ? colors.surface2 : "transparent", opacity: send.isPending ? 0.5 : 1 })}
-        >
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-            <Text numberOfLines={1} style={{ color: colors.foreground, fontSize: 13, fontWeight: "600", flex: 1, minWidth: 0 }}>{item.title}</Text>
-            <Icon name="Send" size={12} color={colors.foregroundMuted} />
-          </View>
-          <Text numberOfLines={4} style={{ ...muted, lineHeight: 16 }}>{previewLines(item.text).join("\n") || item.subtitle}</Text>
-        </Pressable>
-      ))}
-      </ScrollView>
+      {/* Compact layouts open in the host's scrolling bottom sheet, which sizes itself to its
+          content. A nested ScrollView there reports its own content height and shrinks the sheet. */}
+      {layout.compact
+        ? <View style={{ gap: 8 }}>{rows}</View>
+        : <ScrollView keyboardShouldPersistTaps="handled" style={{ flexGrow: 0, flexShrink: 1, maxHeight: 360, minHeight: 0 }} contentContainerStyle={{ gap: 8 }}>{rows}</ScrollView>}
       {(results.data?.items.length ?? 0) > RESULT_LIMIT && <Text style={muted}>Showing {RESULT_LIMIT} of {results.data!.items.length}. Refine the search.</Text>}
     </View>
   );
