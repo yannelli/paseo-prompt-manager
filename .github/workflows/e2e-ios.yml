@@ -40,15 +40,15 @@ jobs:
           path: ${{ runner.temp }}/paseo-app
           key: paseo-ios-app-${{ steps.ver.outputs.paseo }}-${{ steps.ver.outputs.xcode }}-${{ hashFiles('e2e/ios/build-app.sh') }}
 
+      - name: Node for the Paseo build
+        if: steps.app-cache.outputs.cache-hit != 'true'
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+
       - name: Build Paseo for the iOS simulator
         if: steps.app-cache.outputs.cache-hit != 'true'
-        run: |
-          echo "::group::node"
-          npm i -g npm@latest >/dev/null 2>&1 || true
-          echo "::endgroup::"
-          e2e/ios/build-app.sh "${{ steps.ver.outputs.paseo }}" "${{ runner.temp }}/paseo-app"
-        env:
-          PASEO_NODE_VERSION: "22"
+        run: e2e/ios/build-app.sh "${{ steps.ver.outputs.paseo }}" "${{ runner.temp }}/paseo-app"
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
