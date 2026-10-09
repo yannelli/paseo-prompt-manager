@@ -2,17 +2,16 @@ appId: sh.paseo
 ---
 # iOS only. The keyboard stays up while the next field scrolls into view, and Maestro counts a field
 # behind the keys as visible, so the tap lands on a key. Android resizes the window, so it needs nothing.
-# Multiline fields have no dismissing return key; the editor's "Hide keyboard" button does it while on screen.
-- runFlow:
-    when:
-      platform: iOS
-      visible: Hide keyboard
-    commands:
-      - tapOn: Hide keyboard
-      - waitForAnimationToEnd
+# Multiline fields have no dismissing return key; the editor's "Hide keyboard" button does it, and it
+# scrolls away with the header, so bring it back first.
 - runFlow:
     when:
       platform: iOS
       visible: return
     commands:
-      - hideKeyboard
+      - scrollUntilVisible:
+          element: Hide keyboard
+          direction: UP
+          timeout: 15000
+      - tapOn: Hide keyboard
+      - waitForAnimationToEnd

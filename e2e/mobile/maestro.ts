@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { resetMaestroDriver } from "./device.ts";
+import { resetMaestroDriver, stopIosDriver } from "./device.ts";
 import { appId, flowsSource, maestroBin, maestroEnv, maestroTarget, platform, resultsDir } from "./config.ts";
 
 const renderedFlows = join(resultsDir, "flows");
@@ -51,13 +51,39 @@ async function attemptFlow(name: string, label: string, env: Record<string, stri
   ];
   const log: string[] = [];
   const child = spawn(maestroBin, args, { env: maestroEnv(), cwd: out, stdio: ["ignore", "pipe", "pipe"] });
-  child.stdout.on("data", (chunk: Buffer) => log.push(chunk.toString()));
-  child.stderr.on("data", (chunk: Buffer) => log.push(chunk.toString()));
+  let lastData = Date.now();
+  const collect = (chunk: Buffer) => {
+    log.push(chunk.toString());
+    lastData = Date.now();
+  };
+  child.stdout.on("data", collect);
+  child.stderr.on("data", collect);
   const timer = setTimeout(() => child.kill("SIGKILL"), FLOW_TIMEOUT_MS);
-  const code = await new Promise<number | null>((resolve, reject) => {
+  // On iOS Maestro sometimes never exits after its last command, while it stops the XCUITest driver.
+  // Maestro writes a command's line when it starts and appends the status when it ends, so output that
+  // stops at a finished line with no failure means the flow is over and only the shutdown hangs.
+  let hungAfterFlow = false;
+  const watchdog = platform === "ios"
+    ? setInterval(() => {
+      const text = log.join("");
+      if (Date.now() - lastData > 60_000 && /(COMPLETED|SKIPPED)\n$/.test(text) && !/FAILED|Exception/.test(text)) {
+        hungAfterFlow = true;
+        child.kill("SIGKILL");
+      }
+    }, 5_000)
+    : undefined;
+  let code = await new Promise<number | null>((resolve, reject) => {
     child.on("error", reject);
     child.on("close", resolve);
-  }).finally(() => clearTimeout(timer));
+  }).finally(() => {
+    clearTimeout(timer);
+    clearInterval(watchdog);
+  });
+  if (hungAfterFlow) {
+    code = 0;
+    log.push("\n[e2e] Maestro finished the flow but did not exit; stopped it.\n");
+  }
+  if (platform === "ios") await stopIosDriver();
   reinstallDriver = code !== 0;
   const output = log.join("");
   await writeFile(join(out, "maestro.log"), `maestro ${args.join(" ")}\n\n${output}`);
