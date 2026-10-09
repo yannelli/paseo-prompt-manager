@@ -10,6 +10,18 @@ appId: sh.paseo
       platform: Android
     commands:
       - runFlow: dismiss-anr.yaml
+# A deep link alert left by an earlier flow stays over the relaunched app and hides it.
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - repeat:
+          times: 3
+          while:
+            visible: Open in.*
+          commands:
+            - tapOn: Cancel
+            - waitForAnimationToEnd
 - extendedWaitUntil:
     visible:
       id: menu-button
