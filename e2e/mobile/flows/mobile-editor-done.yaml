@@ -1,5 +1,10 @@
 appId: sh.paseo
 ---
+# A new Maestro session needs the screen settled before its first tap lands.
+- extendedWaitUntil:
+    visible: Hide keyboard
+    timeout: 15000
+- waitForAnimationToEnd
 - tapOn: Hide keyboard
 - waitForAnimationToEnd
 - assertNotVisible: Hide keyboard

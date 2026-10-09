@@ -16,4 +16,15 @@ appId: sh.paseo
 - tapOn: Save prompt
 - extendedWaitUntil:
     visible: Saved
+    timeout: 10000
+    optional: true
+# iOS sometimes spends the first tap ending text editing. A second tap is safe: the button is
+# disabled once the prompt is saved.
+- runFlow:
+    when:
+      notVisible: Saved
+    commands:
+      - tapOn: Save prompt
+- extendedWaitUntil:
+    visible: Saved
     timeout: 20000

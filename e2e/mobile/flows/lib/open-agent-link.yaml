@@ -1,0 +1,17 @@
+appId: sh.paseo
+---
+- openLink: paseo:///h/${SERVER_ID}/agent/${AGENT_ID}
+# iOS asks once per install before a custom URL scheme opens the app; the alert takes a moment to appear.
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - extendedWaitUntil:
+          visible: Open in.*
+          timeout: 10000
+          optional: true
+      - runFlow:
+          when:
+            visible: Open in.*
+          commands:
+            - tapOn: Open

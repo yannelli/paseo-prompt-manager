@@ -115,9 +115,11 @@ jobs:
         run: |
           udid="$(xcrun simctl list devices available -j | node -e '
             const devices = JSON.parse(require("fs").readFileSync(0, "utf8")).devices;
-            for (const runtime of Object.keys(devices).filter((key) => key.includes("iOS")).sort().reverse()) {
-              const match = devices[runtime].find((device) => device.name === "iPhone 16");
-              if (match) { console.log(match.udid); break; }
+            // Prefer iOS 18: Maestro taps on the iOS 26 simulator often only end text editing.
+            const runtimes = Object.keys(devices).filter((key) => key.includes("iOS")).sort().reverse();
+            for (const runtime of [...runtimes.filter((key) => key.includes("iOS-18")), ...runtimes]) {
+              const match = devices[runtime].find((device) => device.name.startsWith("iPhone 16"));
+              if (match) { console.error(`Using ${match.name} on ${runtime}`); console.log(match.udid); break; }
             }')"
           test -n "$udid" || { xcrun simctl list devices available; exit 1; }
           echo "SIM_UDID=$udid" >> "$GITHUB_ENV"

@@ -21,7 +21,12 @@ appId: sh.paseo
     timeout: 15000
 - assertNotVisible: Send Summary
 - tapOn: Send Code review
+# The toast is gone by the time a slow driver looks; the sent message in the timeline stays.
+# The runner checks what the agent received.
 - extendedWaitUntil:
-    visible: Sent "Code review"\.
+    notVisible: Search saved prompts
     timeout: 20000
+- extendedWaitUntil:
+    visible: ".*Review the diff for bugs, missing tests, and unclear names.*"
+    timeout: 30000
 - takeScreenshot: pill-sent

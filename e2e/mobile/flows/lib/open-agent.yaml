@@ -13,21 +13,16 @@ appId: sh.paseo
 - tapOn:
     id: sidebar-close
 - waitForAnimationToEnd
-- openLink: paseo:///h/${SERVER_ID}/agent/${AGENT_ID}
-# iOS asks once per install before a custom URL scheme opens the app; the alert takes a moment to appear.
-- runFlow:
-    when:
-      platform: iOS
-    commands:
-      - extendedWaitUntil:
-          visible: Open in.*
-          timeout: 10000
-          optional: true
-      - runFlow:
-          when:
-            visible: Open in.*
-          commands:
-            - tapOn: Open
+- runFlow: open-agent-link.yaml
+# A deep link that arrives before the host reconnects lands on the home screen. Open it again.
 - extendedWaitUntil:
     visible: Send a saved prompt
-    timeout: 90000
+    timeout: 30000
+    optional: true
+- runFlow:
+    when:
+      notVisible: Send a saved prompt
+    file: open-agent-link.yaml
+- extendedWaitUntil:
+    visible: Send a saved prompt
+    timeout: 60000
