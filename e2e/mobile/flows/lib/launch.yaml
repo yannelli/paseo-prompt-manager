@@ -1,0 +1,10 @@
+appId: sh.paseo
+---
+# Restarts the installed app (data kept) and waits for the connected home screen.
+- launchApp:
+    permissions:
+      all: allow
+- extendedWaitUntil:
+    visible:
+      id: message-input-root
+    timeout: 90000

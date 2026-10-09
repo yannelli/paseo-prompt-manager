@@ -1,0 +1,8 @@
+appId: sh.paseo
+---
+# Opens the agent screen through the app's deep link once the host registry is loaded.
+- runFlow: launch.yaml
+- openLink: paseo:///h/${SERVER_ID}/agent/${AGENT_ID}
+- extendedWaitUntil:
+    visible: Send a saved prompt
+    timeout: 90000

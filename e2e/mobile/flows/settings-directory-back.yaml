@@ -1,0 +1,11 @@
+appId: sh.paseo
+---
+- scrollUntilVisible:
+    element: Back to prompts
+    direction: UP
+    timeout: 30000
+- tapOn: Back to prompts
+- extendedWaitUntil:
+    visible: Open Elsewhere
+    timeout: 30000
+- assertNotVisible: Open Here

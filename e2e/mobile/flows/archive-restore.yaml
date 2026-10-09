@@ -1,0 +1,20 @@
+appId: sh.paseo
+---
+- tapOn: Back to library
+- extendedWaitUntil:
+    visible: New prompt
+    timeout: 15000
+- assertNotVisible: Open Retro
+- tapOn: Archived
+- extendedWaitUntil:
+    visible: Open Retro
+    timeout: 15000
+- tapOn: Open Retro
+- extendedWaitUntil:
+    visible: This prompt is archived. Restore it to edit or send it\.
+    timeout: 15000
+- tapOn: Restore
+- extendedWaitUntil:
+    visible: Prompt restored from the archive\.
+    timeout: 20000
+- takeScreenshot: archive-restored

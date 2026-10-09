@@ -1,0 +1,15 @@
+appId: sh.paseo
+---
+# Opens the prompt library from the drawer's "Prompts" row.
+- runFlow: launch.yaml
+- tapOn:
+    id: menu-button
+- extendedWaitUntil:
+    visible:
+      id: plugin-sidebar-paseo-prompt-manager-library
+    timeout: 20000
+- tapOn:
+    id: plugin-sidebar-paseo-prompt-manager-library
+- extendedWaitUntil:
+    visible: New prompt
+    timeout: 45000

@@ -1,0 +1,17 @@
+appId: sh.paseo
+---
+- runFlow: lib/open-library.yaml
+- tapOn: Settings
+- extendedWaitUntil:
+    visible: Git sync
+    timeout: 15000
+# The label and the switch share the name; the switch is the one right of the description.
+- tapOn:
+    text: Git sync
+    rightOf:
+      text: Commit prompts and version history.*
+- scrollUntilVisible:
+    element: Save settings
+    direction: DOWN
+    timeout: 30000
+- tapOn: Save settings

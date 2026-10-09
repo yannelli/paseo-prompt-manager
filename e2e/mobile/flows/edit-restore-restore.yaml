@@ -1,0 +1,21 @@
+appId: sh.paseo
+---
+# Restores Version 1 of the open prompt as a new revision.
+- scrollUntilVisible:
+    element: Version history
+    direction: UP
+    timeout: 30000
+- tapOn: Version history
+- extendedWaitUntil:
+    visible: Version 1
+    timeout: 20000
+- tapOn: Version 1
+- scrollUntilVisible:
+    element: Restore as new version
+    direction: DOWN
+    timeout: 30000
+- tapOn: Restore as new version
+- extendedWaitUntil:
+    visible: Version restored as a new revision\.
+    timeout: 20000
+- takeScreenshot: edit-restore-restored

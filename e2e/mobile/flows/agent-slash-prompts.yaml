@@ -1,0 +1,18 @@
+appId: sh.paseo
+---
+- runFlow: lib/open-agent.yaml
+- tapOn: Message agent...
+- inputText: /prompts
+- tapOn: Send message
+- extendedWaitUntil:
+    visible: Save instructions and send them to this agent\.
+    timeout: 30000
+- tapOn: Open Code review
+- extendedWaitUntil:
+    visible: Send saved prompt to agent
+    timeout: 20000
+- takeScreenshot: slash-prompts-panel
+- tapOn: Send saved prompt to agent
+- extendedWaitUntil:
+    visible: Prompt sent to this agent\.
+    timeout: 20000

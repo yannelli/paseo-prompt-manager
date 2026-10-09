@@ -1,0 +1,11 @@
+appId: sh.paseo
+---
+# The Save row sits above the fields in the editor's single column; scroll back to it.
+- scrollUntilVisible:
+    element: Save prompt
+    direction: UP
+    timeout: 30000
+- tapOn: Save prompt
+- extendedWaitUntil:
+    visible: Saved
+    timeout: 20000
