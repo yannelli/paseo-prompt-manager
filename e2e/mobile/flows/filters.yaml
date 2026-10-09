@@ -8,6 +8,8 @@ appId: sh.paseo
 # Search
 - tapOn: Search prompts
 - inputText: launch
+# The keyboard would hide the rows below the first.
+- hideKeyboard
 - extendedWaitUntil:
     notVisible: Open Code review
     timeout: 15000

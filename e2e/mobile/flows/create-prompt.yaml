@@ -7,6 +7,9 @@ appId: sh.paseo
     timeout: 15000
 - tapOn: Prompt filename
 - inputText: release-notes
+- scrollUntilVisible:
+    element: Prompt description
+    direction: DOWN
 - tapOn: Prompt description
 - inputText: Draft release notes from merged PRs
 - scrollUntilVisible:
@@ -26,6 +29,7 @@ appId: sh.paseo
 - scrollUntilVisible:
     element: Prompt Markdown
     direction: DOWN
+    visibilityPercentage: 20
 - tapOn: Prompt Markdown
 - inputText: "# Release notes"
 - pressKey: Enter

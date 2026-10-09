@@ -1,11 +1,13 @@
 import { spawn } from "node:child_process";
 import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { resetMaestroDriver } from "./device.ts";
 import { appId, flowsSource, maestroBin, maestroEnv, maestroTarget, platform, resultsDir } from "./config.ts";
 
 const renderedFlows = join(resultsDir, "flows");
-const FLOW_TIMEOUT_MS = 6 * 60_000;
+const FLOW_TIMEOUT_MS = 4 * 60_000;
 let invocations = 0;
+let reinstallDriver = true;
 
 /** Copies the flows next to the results, pointing them at the app id under test. */
 export async function renderFlows(): Promise<void> {
@@ -25,13 +27,26 @@ export async function renderFlows(): Promise<void> {
  * and command log under the results folder. Rejects with the tail of Maestro's output when the flow fails.
  */
 export async function runFlow(name: string, label: string, env: Record<string, string>): Promise<void> {
+  // A flow that launches the app itself can run again from the start; one that continues a screen cannot.
+  const restartable = /launchApp|lib\/(launch|open-library|open-agent)\.yaml/.test(await readFile(join(renderedFlows, name), "utf8"));
+  try {
+    await attemptFlow(name, label, env);
+  } catch (error) {
+    if (!restartable) throw error;
+    await resetMaestroDriver();
+    reinstallDriver = true;
+    await attemptFlow(name, `${label}-retry`, env);
+  }
+}
+
+async function attemptFlow(name: string, label: string, env: Record<string, string>): Promise<void> {
   const out = join(resultsDir, "runs", `${String(++invocations).padStart(3, "0")}-${label}`);
   await mkdir(out, { recursive: true });
   const args = [
     ...maestroTarget(), "--no-ansi", "test", join(renderedFlows, name),
     "--debug-output", join(out, "debug"), "--flatten-debug-output", "--test-output-dir", join(out, "output"),
-    // The driver apps stay installed after the first run.
-    ...(invocations > 1 ? ["--no-reinstall-driver"] : []),
+    // The driver apps stay installed after the first successful run.
+    ...(reinstallDriver ? [] : ["--no-reinstall-driver"]),
     ...Object.entries(env).flatMap(([key, value]) => ["-e", `${key}=${value}`]),
   ];
   const log: string[] = [];
@@ -43,6 +58,7 @@ export async function runFlow(name: string, label: string, env: Record<string, s
     child.on("error", reject);
     child.on("close", resolve);
   }).finally(() => clearTimeout(timer));
+  reinstallDriver = code !== 0;
   const output = log.join("");
   await writeFile(join(out, "maestro.log"), `maestro ${args.join(" ")}\n\n${output}`);
   if (code !== 0) {

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Keyboard, Platform, TextInput, type KeyboardEvent, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type ScrollView, type View } from "react-native";
+import { Keyboard, Platform, StatusBar, TextInput, type KeyboardEvent, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type ScrollView, type View } from "react-native";
 
 const native = Platform.OS === "ios" || Platform.OS === "android";
 
@@ -17,7 +17,8 @@ export function useKeyboardInset() {
   useEffect(() => {
     if (!native) return;
     const show = (event: KeyboardEvent) => {
-      keyboardTop.current = event.endCoordinates.screenY;
+      // `screenY` is in screen coordinates, but Android's `measureInWindow` leaves the status bar out of its window coordinates.
+      keyboardTop.current = event.endCoordinates.screenY - (Platform.OS === "android" ? StatusBar.currentHeight ?? 0 : 0);
       setVisible(true);
       measure();
     };

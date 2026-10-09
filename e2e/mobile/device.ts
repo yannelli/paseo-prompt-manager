@@ -52,13 +52,49 @@ export async function prepareDevice(daemon: TestDaemon): Promise<void> {
     await adb(["shell", "settings", "put", "secure", "show_ime_with_hard_keyboard", "1"]);
     // A busy CI emulator makes system apps miss ANR deadlines; the dialog would cover the app under test.
     await adb(["shell", "settings", "put", "global", "hide_error_dialogs", "1"]);
+    // Modern phones navigate by gesture; the emulator defaults to three buttons, which changes the bottom insets.
+    await adb(["shell", "cmd", "overlay", "enable", "com.android.internal.systemui.navbar.gestural"]);
     if (appPath) await adb(["install", "-r", "-g", "-t", appPath], 600_000);
+    await waitForIdle();
     const installed = await adb(["shell", "pm", "list", "packages", appId]);
     if (!installed.split("\n").some((line) => line.trim() === `package:${appId}`)) {
       throw new Error(`${appId} is not installed on the device. Installed: ${installed.trim() || "(none)"}`);
     }
   } else if (appPath) {
     await execute("xcrun", ["simctl", "install", target.serial ?? "booted", appPath], { timeout: 600_000 });
+  }
+}
+
+/** Saves a screenshot of the device into the results folder. */
+export async function screenshot(label: string): Promise<void> {
+  await mkdir(join(resultsDir, "checks"), { recursive: true });
+  const file = join(resultsDir, "checks", `${label}.png`);
+  if (platform === "android") {
+    const serial = target.serial ? ["-s", target.serial] : [];
+    const { stdout } = await execute("adb", [...serial, "exec-out", "screencap", "-p"], { encoding: "buffer", maxBuffer: 64 * 1024 * 1024 });
+    await writeFile(file, stdout);
+  }
+}
+
+/** Stops a Maestro driver that a killed run left behind, so the next run starts it clean. */
+export async function resetMaestroDriver(): Promise<void> {
+  if (platform !== "android") return;
+  for (const name of ["dev.mobile.maestro", "dev.mobile.maestro.test"]) await adb(["shell", "am", "force-stop", name]).catch(() => undefined);
+  await adb(["forward", "--remove-all"]).catch(() => undefined);
+}
+
+/** Selects all text in the focused field, so the next input replaces it. */
+export async function selectAll(): Promise<void> {
+  if (platform === "android") await adb(["shell", "input", "keycombination", "113", "29"]);
+}
+
+/** Waits for the emulator to calm down after the install, whose dexopt starves system apps into ANR dialogs. */
+async function waitForIdle(timeoutMs = 180_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const load = Number((await adb(["shell", "cat", "/proc/loadavg"])).split(" ")[0]);
+    if (load < 2) return;
+    await sleep(5_000);
   }
 }
 
@@ -95,7 +131,7 @@ function collect(value: unknown, into: UiNode[]) {
 
 /** Flat list of the nodes on screen, from `maestro hierarchy`. The raw dump lands in the results folder. */
 export async function hierarchy(label: string): Promise<UiNode[]> {
-  const args = [...maestroTarget(), "hierarchy"];
+  const args = [...maestroTarget(), "hierarchy", "--no-reinstall-driver"];
   const { stdout } = await execute(maestroBin, args, { env: maestroEnv(), timeout: 120_000, maxBuffer: 64 * 1024 * 1024 });
   const start = stdout.indexOf("{");
   if (start < 0) throw new Error(`maestro hierarchy printed no JSON:\n${stdout.slice(0, 2000)}`);
@@ -142,7 +178,7 @@ export async function waitForKeyboard(want: boolean, label: string, timeoutMs = 
   throw new Error(`Expected the keyboard to be ${want ? "shown" : "hidden"} but dumpsys input_method says ${last}.`);
 }
 
-/** Top edge of the soft keyboard in screen pixels, from the InputMethod window frame. */
+/** Top edge of the soft keyboard in screen pixels, from the touchable region of the InputMethod window. */
 export async function keyboardTop(label: string): Promise<number> {
   if (platform !== "android") throw new Error("keyboardTop is implemented for Android only.");
   const out = await dump(`${label}.windows`, ["shell", "dumpsys", "window", "windows"]);
@@ -152,9 +188,8 @@ export async function keyboardTop(label: string): Promise<number> {
   const block: string[] = [];
   for (let index = start + 1; index < lines.length && !/^\s*Window #\d+ Window\{/.test(lines[index]); index++) block.push(lines[index]);
   const text = block.join("\n");
-  const frame = /Frames:[^\n]*?\bframe=\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]/.exec(text)
-    ?? /\bmFrame=\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]/.exec(text)
-    ?? /\bframe=\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]/.exec(text);
-  if (!frame) throw new Error(`Cannot find the InputMethod frame in dumpsys window (${label}):\n${text.slice(0, 1500)}`);
-  return Number(frame[2]);
+  // The IME window spans the whole display below the status bar; its touchable region is the keyboard itself.
+  const region = /touchable region=SkRegion\(\((-?\d+),(-?\d+),(-?\d+),(-?\d+)\)/.exec(text);
+  if (!region) throw new Error(`Cannot find the InputMethod touchable region in dumpsys window (${label}):\n${text.slice(0, 1500)}`);
+  return Number(region[2]);
 }

@@ -11,6 +11,9 @@ appId: sh.paseo
     timeout: 15000
 - takeScreenshot: archive-dialog
 - tapOn: Archive
+# Archiving closes the editor and returns to the list.
 - extendedWaitUntil:
-    visible: This prompt is archived. Restore it to edit or send it\.
+    visible: New prompt
     timeout: 20000
+- assertNotVisible: Open Retro
+- takeScreenshot: archive-done

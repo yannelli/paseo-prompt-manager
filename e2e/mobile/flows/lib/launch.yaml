@@ -5,6 +5,7 @@ appId: sh.paseo
 - launchApp:
     permissions:
       all: allow
+- runFlow: dismiss-anr.yaml
 - extendedWaitUntil:
     visible:
       id: menu-button
