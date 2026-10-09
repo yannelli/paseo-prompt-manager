@@ -25,6 +25,8 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+      # The shared `page` fixture still instantiates a Playwright browser before the desktop override runs.
+      - run: npx playwright install chromium
       - name: Install Electron runtime libraries and Xvfb
         run: |
           sudo apt-get update
