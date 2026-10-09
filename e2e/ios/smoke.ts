@@ -12,8 +12,8 @@ try {
   await library.seed("smoke", { content: "# Smoke prompt\n\nSmoke body", description: "d" });
   const result = spawnSync(
     "maestro",
-    ["test", "-e", `PASEO_E2E_ENDPOINT=${daemon.endpoint}`, "--debug-output", join(import.meta.dirname, "../.results/maestro"), join(import.meta.dirname, "smoke.yaml")],
-    { stdio: "inherit" },
+    ["test", "--debug-output", join(import.meta.dirname, "../.results/maestro"), join(import.meta.dirname, "smoke.yaml")],
+    { stdio: "inherit", env: { ...process.env, MAESTRO_E2E_ENDPOINT: daemon.endpoint } },
   );
   status = result.status ?? 1;
 } finally {

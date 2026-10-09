@@ -16,7 +16,7 @@ appId: sh.paseo
 - tapOn:
     id: "direct-host-input"
 - eraseText
-- inputText: ${PASEO_E2E_ENDPOINT}
+- inputText: ${MAESTRO_E2E_ENDPOINT}
 - hideKeyboard
 - tapOn:
     id: "direct-host-submit"

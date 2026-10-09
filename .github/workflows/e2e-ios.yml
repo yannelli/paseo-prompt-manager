@@ -35,7 +35,7 @@ jobs:
 
       - name: Restore simulator app
         id: app-cache
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ${{ runner.temp }}/paseo-app
           key: paseo-ios-app-${{ steps.ver.outputs.paseo }}-${{ steps.ver.outputs.xcode }}-${{ hashFiles('e2e/ios/build-app.sh') }}
@@ -49,6 +49,13 @@ jobs:
       - name: Build Paseo for the iOS simulator
         if: steps.app-cache.outputs.cache-hit != 'true'
         run: e2e/ios/build-app.sh "${{ steps.ver.outputs.paseo }}" "${{ runner.temp }}/paseo-app"
+
+      - name: Save simulator app
+        if: steps.app-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ runner.temp }}/paseo-app
+          key: ${{ steps.app-cache.outputs.cache-primary-key }}
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
@@ -95,6 +102,6 @@ jobs:
           name: e2e-ios-results
           path: |
             e2e/.results/
-            ~/.maestro/tests/
+            /Users/runner/.maestro/tests/
           retention-days: 14
           if-no-files-found: ignore
