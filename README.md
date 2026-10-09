@@ -132,7 +132,12 @@ paseo plugin ls paseo-prompt-manager
 paseo plugin logs paseo-prompt-manager
 ```
 
-The tests cover storage, imports, search, versioning, conflicts, Git sync, and the release script using temporary directories and local Git remotes. Browser file-picker and desktop/mobile UI checks remain manual.
+The unit tests cover storage, imports, search, versioning, conflicts, Git sync, and the release script using temporary directories and local Git remotes. End-to-end tests run the plugin in the Paseo web, desktop, Android, and iOS apps; see [docs/e2e.md](docs/e2e.md).
+
+```sh
+npx playwright install chromium
+npm run e2e:web
+```
 
 [docs/INDEX.md](docs/INDEX.md) lists project notes, including which Paseo SDK release adds each plugin API this project uses. Read it before changing `requirements.paseo` or the `@getpaseo/plugin` version.
 
