@@ -53,6 +53,7 @@ export async function prepareDevice(daemon: TestDaemon): Promise<void> {
     // A busy CI emulator makes system apps miss ANR deadlines; the dialog would cover the app under test.
     await adb(["shell", "settings", "put", "global", "hide_error_dialogs", "1"]);
     if (appPath) await adb(["install", "-r", "-g", "-t", appPath], 600_000);
+    await waitForIdle();
     const installed = await adb(["shell", "pm", "list", "packages", appId]);
     if (!installed.split("\n").some((line) => line.trim() === `package:${appId}`)) {
       throw new Error(`${appId} is not installed on the device. Installed: ${installed.trim() || "(none)"}`);
@@ -83,6 +84,16 @@ export async function resetMaestroDriver(): Promise<void> {
 /** Selects all text in the focused field, so the next input replaces it. */
 export async function selectAll(): Promise<void> {
   if (platform === "android") await adb(["shell", "input", "keycombination", "113", "29"]);
+}
+
+/** Waits for the emulator to calm down after the install, whose dexopt starves system apps into ANR dialogs. */
+async function waitForIdle(timeoutMs = 180_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const load = Number((await adb(["shell", "cat", "/proc/loadavg"])).split(" ")[0]);
+    if (load < 2) return;
+    await sleep(5_000);
+  }
 }
 
 /** Screen size in pixels, the same coordinate space as the bounds Maestro reports. */

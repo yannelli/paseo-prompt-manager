@@ -5,6 +5,7 @@ appId: sh.paseo
     clearState: true
     permissions:
       all: allow
+- runFlow: lib/dismiss-anr.yaml
 - extendedWaitUntil:
     visible:
       id: welcome-screen
