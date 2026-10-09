@@ -73,6 +73,13 @@ export async function screenshot(label: string): Promise<void> {
   }
 }
 
+/** Stops a Maestro driver that a killed run left behind, so the next run starts it clean. */
+export async function resetMaestroDriver(): Promise<void> {
+  if (platform !== "android") return;
+  for (const name of ["dev.mobile.maestro", "dev.mobile.maestro.test"]) await adb(["shell", "am", "force-stop", name]).catch(() => undefined);
+  await adb(["forward", "--remove-all"]).catch(() => undefined);
+}
+
 /** Selects all text in the focused field, so the next input replaces it. */
 export async function selectAll(): Promise<void> {
   if (platform === "android") await adb(["shell", "input", "keycombination", "113", "29"]);
@@ -111,7 +118,7 @@ function collect(value: unknown, into: UiNode[]) {
 
 /** Flat list of the nodes on screen, from `maestro hierarchy`. The raw dump lands in the results folder. */
 export async function hierarchy(label: string): Promise<UiNode[]> {
-  const args = [...maestroTarget(), "hierarchy"];
+  const args = [...maestroTarget(), "hierarchy", "--no-reinstall-driver"];
   const { stdout } = await execute(maestroBin, args, { env: maestroEnv(), timeout: 120_000, maxBuffer: 64 * 1024 * 1024 });
   const start = stdout.indexOf("{");
   if (start < 0) throw new Error(`maestro hierarchy printed no JSON:\n${stdout.slice(0, 2000)}`);

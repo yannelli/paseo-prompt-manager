@@ -10,6 +10,9 @@ appId: sh.paseo
       id: sidebar-project-list
     timeout: 60000
 - takeScreenshot: open-agent-drawer
+- tapOn:
+    id: sidebar-close
+- waitForAnimationToEnd
 - openLink: paseo:///h/${SERVER_ID}/agent/${AGENT_ID}
 - extendedWaitUntil:
     visible: Send a saved prompt
