@@ -91,8 +91,6 @@ jobs:
           echo "SIM_UDID=$udid" >> "$GITHUB_ENV"
           # The soft keyboard only shows when the simulator does not use the Mac keyboard.
           defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool false
-          xcrun simctl boot "$udid" || true
-          open -a Simulator --args -CurrentDeviceUDID "$udid"
           xcrun simctl bootstatus "$udid" -b
           app="$(ls -d "$RUNNER_TEMP"/paseo-app/*.app | head -1)"
           xcrun simctl install "$udid" "$app"
@@ -112,7 +110,7 @@ jobs:
           PROMPT_E2E_APP_ID: ${{ env.IOS_BUNDLE_ID }}
           PROMPT_E2E_DEVICE: ${{ env.SIM_UDID }}
           # Narrow a debugging run to scenarios whose title matches.
-          PROMPT_E2E_PATTERN: ""
+          PROMPT_E2E_PATTERN: "focused editor field"
 
       - if: ${{ !cancelled() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

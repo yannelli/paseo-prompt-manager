@@ -27,7 +27,7 @@ try {
   const first = run(["hierarchy"]);
   await writeFile(join(results, "hierarchy-before.json"), `${first.stdout}\n---stderr---\n${first.stderr}`);
   await sh("launchctl-after-hierarchy.txt", "xcrun simctl spawn booted launchctl list | grep -i -E 'paseo|UIKitApplication'");
-  await writeFile(join(results, "probe-flow.txt"), String(run(["test", join(import.meta.dirname, "probe.yaml")]).stdout));
+  await writeFile(join(results, "probe-flow.txt"), String(run(["test", "--debug-output", join(results, "probe-debug"), join(import.meta.dirname, "probe.yaml")]).stdout));
   await writeFile(join(results, "hierarchy-keyboard.json"), run(["hierarchy"]).stdout);
   spawnSync("xcrun", ["simctl", "io", "booted", "screenshot", join(results, "keyboard.png")]);
 } finally {
