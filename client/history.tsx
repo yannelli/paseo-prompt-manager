@@ -34,7 +34,7 @@ export function VersionHistory({ theme, versions, loading, selected, onSelect, s
         {versions && <Text style={{ color: colors.foregroundMuted, fontSize: 12 }}>{versions.length}</Text>}
         <IconButton icon="X" label="Hide history" onPress={onClose} colors={colors} size={28} />
       </View>
-      <ScrollView keyboardShouldPersistTaps="handled" style={{ flex: 1, minHeight: 0 }} contentContainerStyle={{ padding: 8, gap: 8 }}>
+      <ScrollView keyboardShouldPersistTaps="handled" nestedScrollEnabled style={{ flex: 1, minHeight: 0 }} contentContainerStyle={{ padding: 8, gap: 8 }}>
         {loading && <Text style={{ color: colors.foregroundMuted, fontSize: 12, padding: 6 }}>Loading versions…</Text>}
         {versions?.length === 0 && <Text style={{ color: colors.foregroundMuted, fontSize: 12, padding: 6 }}>No saved versions yet. Each save adds one.</Text>}
         {versions?.map((item) => {

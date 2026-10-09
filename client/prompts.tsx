@@ -3,11 +3,12 @@ import { usePaseo, useRpc } from "@getpaseo/plugin/client";
 import { Icon, ScrollView, TextInput, useToast } from "@getpaseo/plugin/client/react-native";
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Platform, Pressable, Text, View } from "react-native";
 import { MarkdownPreview } from "./markdown";
 import { FolderPicker, FolderBreadcrumb } from "./editor";
 import { VersionHistory } from "./history";
 import { ImportPrompts } from "./import";
+import { useKeyboardInset, useRevealFocusedInput } from "./keyboard";
 import { LibrarySettingsScreen } from "./settings";
 import { LibrarySidebar } from "./sidebar";
 import { SyncBadge, describeMode } from "./sync";
@@ -72,6 +73,8 @@ export function PromptLibrary({ theme, layout, agentId }: Props) {
   const [pending, setPending] = useState<(() => void) | null>(null);
   const [archiveConfirm, setArchiveConfirm] = useState(false);
   const operationLock = useRef(false);
+  const keyboard = useKeyboardInset();
+  const reveal = useRevealFocusedInput();
 
   const settings = useQuery({ queryKey: ["prompt-settings"], queryFn: () => settingsRpc({}) });
   const root = settings.data?.directory;
@@ -227,6 +230,8 @@ export function PromptLibrary({ theme, layout, agentId }: Props) {
   });
   const saveDisabled = locked || !draftDirty || !name.trim() || !content.trim() || Boolean(current?.archived);
   const fullEditor = mode === "editor" && expanded;
+  // On phones the editor is one scrolling column, so the keyboard never hides the field being edited.
+  const flowing = layout.compact && !expanded;
   const showSidebar = !fullEditor && (!layout.compact || mode === "list");
   const showMain = !layout.compact || mode === "editor";
   const status = draftDirty ? { label: "Unsaved changes", color: colors.statusWarning } : current?.archived ? { label: "Archived", color: colors.foregroundMuted } : current ? { label: "Saved", color: colors.statusSuccess } : { label: "Draft", color: colors.foregroundMuted };
@@ -237,6 +242,32 @@ export function PromptLibrary({ theme, layout, agentId }: Props) {
 
   const detailsSummary = [folder ? folder : "Library root", tags.length ? `${tags.length} tag${tags.length === 1 ? "" : "s"}` : "no tags", description.trim() ? "described" : "no description"].join(" · ");
 
+  const detailFields = (
+    <>
+      {!current && (
+        <Field label="Filename" hint="Lowercase letters, numbers, and dashes. The first Markdown heading becomes the title." colors={colors}>
+          <TextInput accessibilityLabel="Prompt filename" value={name} onChangeText={setName} editable={!locked} autoCapitalize="none" autoCorrect={false} placeholder="code-review" placeholderTextColor={colors.foregroundMuted} style={{ ...input, backgroundColor: colors.surface0, fontFamily: "monospace", fontSize: 13 }} />
+        </Field>
+      )}
+      <Field label="Description" hint="Shown in the library and searchable. Explain when to use this prompt." colors={colors}>
+        <TextInput accessibilityLabel="Prompt description" value={description} onChangeText={setDescription} editable={!readOnly} maxLength={2000} multiline placeholder="When to use this prompt" placeholderTextColor={colors.foregroundMuted} style={{ ...input, backgroundColor: colors.surface0, minHeight: 60 }} />
+      </Field>
+      <Field label="Tags" hint="Separate tags with commas." colors={colors}>
+        <TextInput accessibilityLabel="Prompt tags" value={tagsText} onChangeText={setTagsText} editable={!readOnly} autoCapitalize="none" autoCorrect={false} placeholder="review, coding, writing" placeholderTextColor={colors.foregroundMuted} style={{ ...input, backgroundColor: colors.surface0 }} />
+        {tags.length > 0 && <View style={{ ...row, gap: 6 }}>{tags.map((tag) => <Chip key={tag} icon="Hash" label={tag} active colors={colors} disabled={readOnly} onClear={() => setTagsText(tags.filter((value) => value !== tag).join(", "))} />)}</View>}
+      </Field>
+      <Field label="Folder" colors={colors} trailing={<FolderBreadcrumb folder={folder} colors={colors} />}>
+        <FolderPicker folders={folders.data ?? []} selected={folder} onSelect={(value) => setFolder(value ?? "")} colors={colors} disabled={readOnly} maxHeight={150} />
+        {!current?.archived && (
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+            <TextInput accessibilityLabel="Create editor subfolder" value={newFolder} onChangeText={setNewFolder} editable={!locked} placeholder={folder ? `New subfolder in ${folder.split("/").at(-1)}` : "New folder or nested/path"} placeholderTextColor={colors.foregroundMuted} autoCapitalize="none" autoCorrect={false} onSubmitEditing={() => newFolder.trim() && createFolderAt(folder, setFolder)} style={{ ...input, backgroundColor: colors.surface0, flex: 1, width: undefined, paddingVertical: 8, fontSize: 13 }} />
+            <IconButton icon="FolderPlus" label="Create folder" onPress={() => createFolderAt(folder, setFolder)} colors={colors} disabled={locked || !newFolder.trim()} />
+          </View>
+        )}
+      </Field>
+    </>
+  );
+
   const detailsPanel = (
     <Card colors={colors} style={{ padding: 0, gap: 0 }}>
       <Pressable accessibilityRole="button" accessibilityLabel={details ? "Hide details" : "Show details"} accessibilityState={{ expanded: details }} onPress={() => setDetails(!details)} style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 9, paddingHorizontal: 12 }}>
@@ -244,31 +275,9 @@ export function PromptLibrary({ theme, layout, agentId }: Props) {
         <Text style={{ ...text, fontSize: 13, fontWeight: "600" }}>Details</Text>
         <Text numberOfLines={1} style={{ ...muted, flex: 1, minWidth: 0 }}>{detailsSummary}</Text>
       </Pressable>
-      {details && (
-        <ScrollView keyboardShouldPersistTaps="handled" style={{ flexGrow: 0, flexShrink: 1, maxHeight: layout.compact ? 240 : 320, minWidth: 0, borderTopWidth: 1, borderColor: colors.border }} contentContainerStyle={{ gap: 12, padding: 12 }}>
-          {!current && (
-            <Field label="Filename" hint="Lowercase letters, numbers, and dashes. The first Markdown heading becomes the title." colors={colors}>
-              <TextInput accessibilityLabel="Prompt filename" value={name} onChangeText={setName} editable={!locked} autoCapitalize="none" autoCorrect={false} placeholder="code-review" placeholderTextColor={colors.foregroundMuted} style={{ ...input, backgroundColor: colors.surface0, fontFamily: "monospace", fontSize: 13 }} />
-            </Field>
-          )}
-          <Field label="Description" hint="Shown in the library and searchable. Explain when to use this prompt." colors={colors}>
-            <TextInput accessibilityLabel="Prompt description" value={description} onChangeText={setDescription} editable={!readOnly} maxLength={2000} multiline placeholder="When to use this prompt" placeholderTextColor={colors.foregroundMuted} style={{ ...input, backgroundColor: colors.surface0, minHeight: 60 }} />
-          </Field>
-          <Field label="Tags" hint="Separate tags with commas." colors={colors}>
-            <TextInput accessibilityLabel="Prompt tags" value={tagsText} onChangeText={setTagsText} editable={!readOnly} autoCapitalize="none" autoCorrect={false} placeholder="review, coding, writing" placeholderTextColor={colors.foregroundMuted} style={{ ...input, backgroundColor: colors.surface0 }} />
-            {tags.length > 0 && <View style={{ ...row, gap: 6 }}>{tags.map((tag) => <Chip key={tag} icon="Hash" label={tag} active colors={colors} disabled={readOnly} onClear={() => setTagsText(tags.filter((value) => value !== tag).join(", "))} />)}</View>}
-          </Field>
-          <Field label="Folder" colors={colors} trailing={<FolderBreadcrumb folder={folder} colors={colors} />}>
-            <FolderPicker folders={folders.data ?? []} selected={folder} onSelect={(value) => setFolder(value ?? "")} colors={colors} disabled={readOnly} maxHeight={150} />
-            {!current?.archived && (
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-                <TextInput accessibilityLabel="Create editor subfolder" value={newFolder} onChangeText={setNewFolder} editable={!locked} placeholder={folder ? `New subfolder in ${folder.split("/").at(-1)}` : "New folder or nested/path"} placeholderTextColor={colors.foregroundMuted} autoCapitalize="none" autoCorrect={false} onSubmitEditing={() => newFolder.trim() && createFolderAt(folder, setFolder)} style={{ ...input, backgroundColor: colors.surface0, flex: 1, width: undefined, paddingVertical: 8, fontSize: 13 }} />
-                <IconButton icon="FolderPlus" label="Create folder" onPress={() => createFolderAt(folder, setFolder)} colors={colors} disabled={locked || !newFolder.trim()} />
-              </View>
-            )}
-          </Field>
-        </ScrollView>
-      )}
+      {details && (flowing
+        ? <View style={{ gap: 12, padding: 12, borderTopWidth: 1, borderColor: colors.border }}>{detailFields}</View>
+        : <ScrollView keyboardShouldPersistTaps="handled" style={{ flexGrow: 0, flexShrink: 1, maxHeight: 320, minWidth: 0, borderTopWidth: 1, borderColor: colors.border }} contentContainerStyle={{ gap: 12, padding: 12 }}>{detailFields}</ScrollView>)}
     </Card>
   );
 
@@ -288,8 +297,8 @@ export function PromptLibrary({ theme, layout, agentId }: Props) {
     />
   );
 
-  const editor = (
-    <View style={{ flex: 1, minHeight: 0, minWidth: 0, gap: 10 }}>
+  const editorTop = (
+    <>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
         {(layout.compact || expanded) && <IconButton icon="ArrowLeft" label="Back to library" onPress={() => guard(() => { setExpanded(false); setMode("list"); })} colors={colors} disabled={busy} />}
         <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
@@ -300,7 +309,8 @@ export function PromptLibrary({ theme, layout, agentId }: Props) {
             {current && <Text numberOfLines={1} style={{ ...muted, flexShrink: 1 }}>· {current.id}.md · {relativeTime(current.updatedAt)}</Text>}
           </View>
         </View>
-        <Segmented options={[{ value: "edit", label: "Edit", icon: "Pencil" }, { value: "preview", label: "Preview", icon: "Eye" }]} value={view} onChange={setView} colors={colors} />
+        {keyboard.visible && <Button title="Done" icon="KeyboardOff" size="sm" onPress={keyboard.dismiss} colors={colors} accessibilityLabel="Hide keyboard" />}
+        {!(layout.compact && keyboard.visible) && <Segmented options={[{ value: "edit", label: "Edit", icon: "Pencil" }, { value: "preview", label: "Preview", icon: "Eye" }]} value={view} onChange={setView} colors={colors} />}
         <IconButton icon={expanded ? "Minimize2" : "Maximize2"} label={expanded ? "Collapse editor" : "Expand editor"} onPress={() => setExpanded(!expanded)} colors={colors} active={expanded} />
       </View>
       <View style={{ ...row, gap: 6 }}>
@@ -315,22 +325,40 @@ export function PromptLibrary({ theme, layout, agentId }: Props) {
       {agentId && current && draftDirty && !current.archived && <Meta colors={colors} icon="Info">Save your changes before sending this prompt to the agent.</Meta>}
       {expanded && !current && <TextInput accessibilityLabel="Prompt filename" value={name} onChangeText={setName} editable={!locked} autoCapitalize="none" autoCorrect={false} placeholder="Filename, for example code-review" placeholderTextColor={colors.foregroundMuted} style={{ ...input, fontFamily: "monospace", fontSize: 13 }} />}
       {!expanded && detailsPanel}
-      <View style={{ flex: 1, minHeight: expanded ? 0 : 160, minWidth: 0, flexDirection: layout.compact ? "column" : "row", gap: 10 }}>
-        <View style={{ flex: 1, minHeight: 0, minWidth: 0, gap: 6 }}>
-          {view === "preview" ? (
-            <ScrollView keyboardShouldPersistTaps="handled" style={{ flex: 1, minWidth: 0, borderWidth: 1, borderColor: colors.border, borderRadius: radius, backgroundColor: colors.surface1 }} contentContainerStyle={{ padding: 16, minWidth: 0 }}>
-              <MarkdownPreview content={content} theme={theme} />
-            </ScrollView>
-          ) : (
-            <TextInput accessibilityLabel="Prompt Markdown" value={content} onChangeText={setContent} editable={!readOnly} multiline textAlignVertical="top" autoCapitalize="none" autoCorrect={false} placeholder={"# Title\n\nWrite your prompt in Markdown…"} placeholderTextColor={colors.foregroundMuted} style={{ ...input, flex: 1, minHeight: 0, padding: 14, fontFamily: "monospace", fontSize: 13, lineHeight: 21 }} />
-          )}
-          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, paddingHorizontal: 2 }}>
-            <Text style={{ ...muted, fontSize: 11 }}>{wordCount(content)} words · {content.length} characters</Text>
-            {!content.trim() && <Text style={{ ...muted, fontSize: 11 }}>Content is required to save</Text>}
-          </View>
+    </>
+  );
+
+  const previewFrame = { minWidth: 0, borderWidth: 1, borderColor: colors.border, borderRadius: radius, backgroundColor: colors.surface1 } as const;
+  const editorBody = (
+    <View style={{ flex: flowing ? undefined : 1, minHeight: flowing ? undefined : expanded ? 0 : 160, minWidth: 0, flexDirection: layout.compact ? "column" : "row", gap: 10 }}>
+      <View style={{ flex: flowing ? undefined : 1, minHeight: 0, minWidth: 0, gap: 6 }}>
+        {view === "preview" ? (flowing ? (
+          <View style={{ ...previewFrame, padding: 16 }}><MarkdownPreview content={content} theme={theme} /></View>
+        ) : (
+          <ScrollView keyboardShouldPersistTaps="handled" style={{ ...previewFrame, flex: 1 }} contentContainerStyle={{ padding: 16, minWidth: 0 }}>
+            <MarkdownPreview content={content} theme={theme} />
+          </ScrollView>
+        )) : (
+          <TextInput accessibilityLabel="Prompt Markdown" value={content} onChangeText={setContent} editable={!readOnly} multiline scrollEnabled={!flowing} textAlignVertical="top" autoCapitalize="none" autoCorrect={false} placeholder={"# Title\n\nWrite your prompt in Markdown…"} placeholderTextColor={colors.foregroundMuted} style={{ ...input, ...(flowing ? { minHeight: 240 } : { flex: 1, minHeight: 0 }), padding: 14, fontFamily: "monospace", fontSize: 13, lineHeight: 21 }} />
+        )}
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, paddingHorizontal: 2 }}>
+          <Text style={{ ...muted, fontSize: 11 }}>{wordCount(content)} words · {content.length} characters</Text>
+          {!content.trim() && <Text style={{ ...muted, fontSize: 11 }}>Content is required to save</Text>}
         </View>
-        {historyPanel && <View style={{ width: layout.compact ? undefined : 320, minWidth: 0, minHeight: 0, maxHeight: layout.compact ? 320 : undefined, flexShrink: layout.compact ? 0 : undefined }}>{historyPanel}</View>}
       </View>
+      {historyPanel && <View style={{ width: layout.compact ? undefined : 320, minWidth: 0, minHeight: 0, height: flowing ? 320 : undefined, maxHeight: layout.compact ? 320 : undefined, flexShrink: layout.compact ? 0 : undefined }}>{historyPanel}</View>}
+    </View>
+  );
+
+  const editor = flowing ? (
+    <ScrollView {...reveal} keyboardShouldPersistTaps="handled" keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "none"} style={{ flex: 1, minHeight: 0, minWidth: 0 }} contentContainerStyle={{ gap: 10, paddingBottom: 12 }}>
+      {editorTop}
+      {editorBody}
+    </ScrollView>
+  ) : (
+    <View style={{ flex: 1, minHeight: 0, minWidth: 0, gap: 10 }}>
+      {editorTop}
+      {editorBody}
     </View>
   );
 
@@ -354,8 +382,8 @@ export function PromptLibrary({ theme, layout, agentId }: Props) {
   );
 
   return (
-    <View style={{ flex: 1, minHeight: 0, minWidth: 0, backgroundColor: colors.surface0, padding, gap: 12 }}>
-      {!fullEditor && (
+    <View ref={keyboard.ref} onLayout={keyboard.onLayout} style={{ flex: 1, minHeight: 0, minWidth: 0, backgroundColor: colors.surface0, padding, paddingBottom: keyboard.inset > 0 ? keyboard.inset + 8 : padding, gap: 12 }}>
+      {!fullEditor && !(layout.compact && keyboard.visible) && (
         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flexShrink: 1, minWidth: 0 }}>
             <View style={{ width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface1, borderWidth: 1, borderColor: colors.border }}>

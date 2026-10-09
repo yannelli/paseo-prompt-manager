@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Text, View } from "react-native";
 import { importPrompts, type ImportResult } from "../shared/prompts";
 import { FolderPicker, FolderBreadcrumb } from "./editor";
+import { useRevealFocusedInput } from "./keyboard";
 import { Button, Card, Field, IconButton, Meta, SectionTitle, inputStyle, radius } from "./ui";
 import { canPickFiles, pickMarkdown } from "./web";
 
@@ -24,6 +25,7 @@ export function ImportPrompts({ theme, busy, run, onImported, onBack, folders, i
   const [folder, setFolder] = useState(initialFolder);
   const [paths, setPaths] = useState("");
   const [result, setResult] = useState<ImportResult | null>(null);
+  const reveal = useRevealFocusedInput();
   const sources = paths.split("\n").map((path) => path.trim()).filter(Boolean);
   const pick = (directory: boolean) => run(async () => {
     const files = await pickMarkdown(directory);
@@ -44,7 +46,7 @@ export function ImportPrompts({ theme, busy, run, onImported, onBack, folders, i
   });
 
   return (
-    <ScrollView keyboardShouldPersistTaps="handled" style={{ flex: 1, minWidth: 0 }} contentContainerStyle={{ gap: 14, paddingBottom: 28, width: "100%", maxWidth: 680 }}>
+    <ScrollView {...reveal} keyboardShouldPersistTaps="handled" style={{ flex: 1, minWidth: 0 }} contentContainerStyle={{ gap: 14, paddingBottom: 28, width: "100%", maxWidth: 680 }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
         <IconButton icon="ArrowLeft" label="Back to library" onPress={onBack} colors={colors} disabled={busy} />
         <SectionTitle title="Import prompts" subtitle="Copy Markdown files into the library with a first saved version. Source files stay in place." colors={colors} />
