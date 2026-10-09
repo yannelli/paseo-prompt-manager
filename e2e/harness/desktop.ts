@@ -1,9 +1,9 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
-import { createServer } from "node:net";
 import { join } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import { chromium, type Browser, type Page } from "@playwright/test";
-import type { TestDaemon } from "./daemon.ts";
+import { freePort, type TestDaemon } from "./daemon.ts";
 
 export interface DesktopClient {
   /** The Paseo desktop process (Electron main). */
@@ -15,17 +15,6 @@ export interface DesktopClient {
 }
 
 const RENDERER_ORIGIN = "paseo://app";
-
-async function freePort(): Promise<number> {
-  return await new Promise((resolve, reject) => {
-    const server = createServer();
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", () => {
-      const { port } = server.address() as { port: number };
-      server.close(() => resolve(port));
-    });
-  });
-}
 
 function exited(child: ChildProcess): boolean {
   return child.exitCode !== null || child.signalCode !== null;
@@ -64,7 +53,9 @@ export async function launchDesktop(daemon: TestDaemon): Promise<DesktopClient> 
     await browser?.close().catch(() => undefined);
     if (app.pid && !exited(app)) {
       try { process.kill(-app.pid, "SIGTERM"); } catch { /* already gone */ }
-      await new Promise((resolve) => { app.once("exit", resolve); setTimeout(resolve, 10_000); });
+      const { promise: gone, resolve: done } = Promise.withResolvers<void>();
+      app.once("exit", () => done());
+      await Promise.race([gone, sleep(10_000)]);
       if (!exited(app)) try { process.kill(-app.pid, "SIGKILL"); } catch { /* already gone */ }
     }
     await rm(userData, { recursive: true, force: true });
@@ -82,7 +73,7 @@ export async function launchDesktop(daemon: TestDaemon): Promise<DesktopClient> 
       } catch {
         browser = undefined;
       }
-      if (!page) await new Promise((resolve) => setTimeout(resolve, 500));
+      if (!page) await sleep(500);
     }
     await page.waitForLoadState("domcontentloaded");
     return { app, page, origin: RENDERER_ORIGIN, close };
