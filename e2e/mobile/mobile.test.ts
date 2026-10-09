@@ -42,7 +42,7 @@ function scenario(title: string, body: (context: { library: TestLibrary; flow: (
     let created: TestAgent | undefined;
     const agent = async () => created ??= await createAgent(daemon, `agent-${slug}`);
     const flow = async (file: string, extra: Record<string, string> = {}) => {
-      const env: Record<string, string> = { ENDPOINT: appEndpoint(daemon), SERVER_ID: daemon.serverId, ...extra };
+      const env: Record<string, string> = { SERVER_ID: daemon.serverId, ...extra };
       if (created) env.AGENT_ID = created.id;
       await runFlow(file, `${slug}-${file.replace(/\.yaml$/, "")}`, env);
     };
@@ -68,7 +68,7 @@ describe(`Prompt manager on ${platform}`, () => {
     const library = new TestLibrary(daemon, "connect");
     await library.activate();
     connection = "failed";
-    await runFlow("connect.yaml", "connect", { ENDPOINT: appEndpoint(daemon), SERVER_ID: daemon.serverId });
+    await runFlow("connect.yaml", "connect", { ...appEndpoint(daemon), SERVER_ID: daemon.serverId });
     connection = "connected";
     // Reaching a screen with the header menu means the app registered the host and its connection came up.
     assert.deepEqual(await library.ids(), []);

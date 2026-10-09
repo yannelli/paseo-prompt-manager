@@ -30,9 +30,9 @@ async function adb(args: string[], timeout = 60_000): Promise<string> {
   return stdout;
 }
 
-/** Address the app uses for the test daemon. The Android emulator reaches it through `adb reverse`. */
-export function appEndpoint(daemon: TestDaemon): string {
-  return `127.0.0.1:${daemon.port}`;
+/** Host and port the app's direct connection form takes. The Android emulator reaches the daemon through `adb reverse`. */
+export function appEndpoint(daemon: TestDaemon): { HOST: string; PORT: string } {
+  return { HOST: "127.0.0.1", PORT: String(daemon.port) };
 }
 
 /**

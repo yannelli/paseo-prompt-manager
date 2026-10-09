@@ -19,10 +19,17 @@ appId: sh.paseo
 - tapOn:
     id: direct-host-input
 - eraseText
-- inputText: ${ENDPOINT}
+- inputText: ${HOST}
+- tapOn:
+    id: direct-port-input
+- eraseText
+- inputText: ${PORT}
 - assertVisible:
     id: direct-host-input
-    text: ${ENDPOINT}
+    text: ${HOST}
+- assertVisible:
+    id: direct-port-input
+    text: ${PORT}
 - takeScreenshot: connect-02-form
 - tapOn:
     id: direct-host-submit
