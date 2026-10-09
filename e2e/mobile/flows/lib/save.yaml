@@ -5,6 +5,14 @@ appId: sh.paseo
     element: Save prompt
     direction: UP
     timeout: 30000
+# iOS: with the keyboard up, the first tap on a button only ends the editing; dismiss the keyboard first.
+- runFlow:
+    when:
+      platform: iOS
+      visible: Hide keyboard
+    commands:
+      - tapOn: Hide keyboard
+      - waitForAnimationToEnd
 - tapOn: Save prompt
 - extendedWaitUntil:
     visible: Saved
