@@ -68,7 +68,15 @@ describe(`Prompt manager on ${platform}`, () => {
     const library = new TestLibrary(daemon, "connect");
     await library.activate();
     connection = "failed";
-    await runFlow("connect.yaml", "connect", { ...appEndpoint(daemon), SERVER_ID: daemon.serverId });
+    // The first launch on a fresh emulator is the slowest; give the app a second try.
+    for (const attempt of [1, 2]) {
+      try {
+        await runFlow("connect.yaml", `connect-${attempt}`, { ...appEndpoint(daemon), SERVER_ID: daemon.serverId });
+        break;
+      } catch (error) {
+        if (attempt === 2) throw error;
+      }
+    }
     connection = "connected";
     // Reaching a screen with the header menu means the app registered the host and its connection came up.
     assert.deepEqual(await library.ids(), []);

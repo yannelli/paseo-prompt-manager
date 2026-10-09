@@ -50,6 +50,8 @@ export async function prepareDevice(daemon: TestDaemon): Promise<void> {
     await adb(["reverse", `tcp:${daemon.port}`, `tcp:${daemon.port}`]);
     // Show the soft keyboard even though the emulator reports a hardware keyboard.
     await adb(["shell", "settings", "put", "secure", "show_ime_with_hard_keyboard", "1"]);
+    // A busy CI emulator makes system apps miss ANR deadlines; the dialog would cover the app under test.
+    await adb(["shell", "settings", "put", "global", "hide_error_dialogs", "1"]);
     if (appPath) await adb(["install", "-r", "-g", "-t", appPath], 600_000);
     const installed = await adb(["shell", "pm", "list", "packages", appId]);
     if (!installed.split("\n").some((line) => line.trim() === `package:${appId}`)) {
