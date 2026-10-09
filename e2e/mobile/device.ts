@@ -92,12 +92,16 @@ export async function rebootSimulator(): Promise<void> {
   await execute("xcrun", ["simctl", "bootstatus", udid, "-b"], { timeout: 300_000 });
 }
 
-/** Stops a Maestro driver that a killed run left behind, so the next run starts it clean. */
+/** Removes a driver a killed run left behind; a force-stopped Android driver can still hold its port. */
 export async function resetMaestroDriver(): Promise<void> {
   if (platform === "ios") return stopIosDriver();
   if (platform !== "android") return;
-  for (const name of ["dev.mobile.maestro", "dev.mobile.maestro.test"]) await adb(["shell", "am", "force-stop", name]).catch(() => undefined);
+  for (const name of ["dev.mobile.maestro.test", "dev.mobile.maestro"]) {
+    await adb(["shell", "am", "force-stop", name]).catch(() => undefined);
+    await adb(["uninstall", name]).catch(() => undefined);
+  }
   await adb(["forward", "--remove-all"]).catch(() => undefined);
+  await waitForIdle(60_000).catch(() => undefined);
 }
 
 /** Selects all text in the focused field, so the next input replaces it. */
