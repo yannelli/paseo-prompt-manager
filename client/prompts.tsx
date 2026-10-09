@@ -232,6 +232,8 @@ export function PromptLibrary({ theme, layout, agentId }: Props) {
   const fullEditor = mode === "editor" && expanded;
   // On phones the editor is one scrolling column, so the keyboard never hides the field being edited.
   const flowing = layout.compact && !expanded;
+  // Phones show the library header only on the list; the editor, settings, and import screens have their own.
+  const showHeader = !fullEditor && !(layout.compact && (mode !== "list" || keyboard.visible));
   const showSidebar = !fullEditor && (!layout.compact || mode === "list");
   const showMain = !layout.compact || mode === "editor";
   const status = draftDirty ? { label: "Unsaved changes", color: colors.statusWarning } : current?.archived ? { label: "Archived", color: colors.foregroundMuted } : current ? { label: "Saved", color: colors.statusSuccess } : { label: "Draft", color: colors.foregroundMuted };
@@ -383,7 +385,7 @@ export function PromptLibrary({ theme, layout, agentId }: Props) {
 
   return (
     <View ref={keyboard.ref} onLayout={keyboard.onLayout} style={{ flex: 1, minHeight: 0, minWidth: 0, backgroundColor: colors.surface0, padding, paddingBottom: keyboard.inset > 0 ? keyboard.inset + 8 : padding, gap: 12 }}>
-      {!fullEditor && !(layout.compact && keyboard.visible) && (
+      {showHeader && (
         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flexShrink: 1, minWidth: 0 }}>
             <View style={{ width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface1, borderWidth: 1, borderColor: colors.border }}>
