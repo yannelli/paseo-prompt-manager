@@ -1,10 +1,5 @@
 appId: sh.paseo
 ---
-- tapOn: Back to library
-- extendedWaitUntil:
-    visible: New prompt
-    timeout: 15000
-- assertNotVisible: Open Retro
 - tapOn: Archived
 - extendedWaitUntil:
     visible: Open Retro

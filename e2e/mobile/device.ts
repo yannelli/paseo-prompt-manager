@@ -62,6 +62,22 @@ export async function prepareDevice(daemon: TestDaemon): Promise<void> {
   }
 }
 
+/** Saves a screenshot of the device into the results folder. */
+export async function screenshot(label: string): Promise<void> {
+  await mkdir(join(resultsDir, "checks"), { recursive: true });
+  const file = join(resultsDir, "checks", `${label}.png`);
+  if (platform === "android") {
+    const serial = target.serial ? ["-s", target.serial] : [];
+    const { stdout } = await execute("adb", [...serial, "exec-out", "screencap", "-p"], { encoding: "buffer", maxBuffer: 64 * 1024 * 1024 });
+    await writeFile(file, stdout);
+  }
+}
+
+/** Selects all text in the focused field, so the next input replaces it. */
+export async function selectAll(): Promise<void> {
+  if (platform === "android") await adb(["shell", "input", "keycombination", "113", "29"]);
+}
+
 /** Screen size in pixels, the same coordinate space as the bounds Maestro reports. */
 export async function screenSize(): Promise<{ width: number; height: number }> {
   if (platform !== "android") throw new Error("screenSize is implemented for Android only.");
@@ -142,7 +158,7 @@ export async function waitForKeyboard(want: boolean, label: string, timeoutMs = 
   throw new Error(`Expected the keyboard to be ${want ? "shown" : "hidden"} but dumpsys input_method says ${last}.`);
 }
 
-/** Top edge of the soft keyboard in screen pixels, from the InputMethod window frame. */
+/** Top edge of the soft keyboard in screen pixels, from the touchable region of the InputMethod window. */
 export async function keyboardTop(label: string): Promise<number> {
   if (platform !== "android") throw new Error("keyboardTop is implemented for Android only.");
   const out = await dump(`${label}.windows`, ["shell", "dumpsys", "window", "windows"]);
@@ -152,9 +168,8 @@ export async function keyboardTop(label: string): Promise<number> {
   const block: string[] = [];
   for (let index = start + 1; index < lines.length && !/^\s*Window #\d+ Window\{/.test(lines[index]); index++) block.push(lines[index]);
   const text = block.join("\n");
-  const frame = /Frames:[^\n]*?\bframe=\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]/.exec(text)
-    ?? /\bmFrame=\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]/.exec(text)
-    ?? /\bframe=\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]/.exec(text);
-  if (!frame) throw new Error(`Cannot find the InputMethod frame in dumpsys window (${label}):\n${text.slice(0, 1500)}`);
-  return Number(frame[2]);
+  // The IME window spans the whole display below the status bar; its touchable region is the keyboard itself.
+  const region = /touchable region=SkRegion\(\((-?\d+),(-?\d+),(-?\d+),(-?\d+)\)/.exec(text);
+  if (!region) throw new Error(`Cannot find the InputMethod touchable region in dumpsys window (${label}):\n${text.slice(0, 1500)}`);
+  return Number(region[2]);
 }

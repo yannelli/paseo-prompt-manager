@@ -8,7 +8,8 @@ import { promisify } from "node:util";
 import { startDaemon, type TestDaemon } from "../harness/daemon.ts";
 import { TestLibrary, createAgent, receivedPrompts, receivedTexts, type TestAgent } from "../harness/library.ts";
 import { platform, resultsDir } from "./config.ts";
-import { appEndpoint, find, hierarchy, keyboardTop, prepareDevice, screenSize, waitForKeyboard } from "./device.ts";
+import { appEndpoint, find, hierarchy, keyboardTop, prepareDevice, screenSize, screenshot, waitForKeyboard } from "./device.ts";
+import { startHooks, stopHooks } from "./hooks.ts";
 import { renderFlows, runFlow } from "./maestro.ts";
 
 const execute = promisify(execFile);
@@ -17,6 +18,7 @@ const CODE_REVIEW = "# Code review\n\nReview the diff for bugs, missing tests, a
 const SUMMARY = "# Summary\n\nSummarize this thread in three bullets.";
 
 let daemon: TestDaemon;
+let hookPort = "";
 /** Every scenario needs the app to be connected; when the connection test failed, fail the rest at once. */
 let connection: "pending" | "connected" | "failed" = "pending";
 
@@ -42,7 +44,7 @@ function scenario(title: string, body: (context: { library: TestLibrary; flow: (
     let created: TestAgent | undefined;
     const agent = async () => created ??= await createAgent(daemon, `agent-${slug}`);
     const flow = async (file: string, extra: Record<string, string> = {}) => {
-      const env: Record<string, string> = { SERVER_ID: daemon.serverId, ...extra };
+      const env: Record<string, string> = { SERVER_ID: daemon.serverId, HOOK_PORT: hookPort, ...extra };
       if (created) env.AGENT_ID = created.id;
       await runFlow(file, `${slug}-${file.replace(/\.yaml$/, "")}`, env);
     };
@@ -54,9 +56,11 @@ before(async () => {
   await renderFlows();
   daemon = await startDaemon({ host: "127.0.0.1" });
   await prepareDevice(daemon);
+  hookPort = String(await startHooks());
 });
 
 after(async () => {
+  await stopHooks();
   if (!daemon) return;
   await mkdir(resultsDir, { recursive: true });
   await copyFile(daemon.logFile, join(resultsDir, "daemon.log")).catch(() => undefined);
@@ -242,6 +246,7 @@ describe(`Prompt manager on ${platform}`, () => {
       const target = await agent();
       await flow("mobile-picker-open.yaml");
       // Regression for #9: the host sized the sheet to a nested list and left it a few rows tall.
+      await screenshot("picker-open");
       const nodes = await hierarchy("picker-open");
       const picker = find(nodes, "prompt-picker")?.bounds;
       assert.ok(picker, "the prompt picker is not in the view hierarchy");
@@ -256,6 +261,7 @@ describe(`Prompt manager on ${platform}`, () => {
     scenario("the focused editor field stays above the keyboard", async ({ library, flow }) => {
       await flow("mobile-editor-new.yaml");
       await waitForKeyboard(true, "editor-tags");
+      await screenshot("editor-tags");
       const top = await keyboardTop("editor-tags");
       const tags = find(await hierarchy("editor-tags"), "Prompt tags");
       assert.ok(tags?.bounds, "the tags field is not in the view hierarchy");
@@ -263,6 +269,7 @@ describe(`Prompt manager on ${platform}`, () => {
 
       await flow("mobile-editor-markdown.yaml");
       await waitForKeyboard(true, "editor-markdown");
+      await screenshot("editor-markdown");
       const markdownTop = await keyboardTop("editor-markdown");
       const markdown = find(await hierarchy("editor-markdown"), "Prompt Markdown");
       assert.ok(markdown?.bounds, "the Markdown field is not in the view hierarchy");
