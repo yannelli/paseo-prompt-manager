@@ -1,0 +1,32 @@
+# Temporary iOS pipeline smoke; removed once the shared mobile suite runs on iOS.
+appId: sh.paseo
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible:
+      id: "welcome-screen"
+    timeout: 60000
+- tapOn:
+    id: "welcome-direct-connection"
+- extendedWaitUntil:
+    visible:
+      id: "add-host-modal"
+    timeout: 10000
+- tapOn:
+    id: "direct-host-input"
+- eraseText
+- inputText: ${PASEO_E2E_ENDPOINT}
+- hideKeyboard
+- tapOn:
+    id: "direct-host-submit"
+- extendedWaitUntil:
+    visible: "Open menu"
+    timeout: 60000
+- tapOn: "Open menu"
+- tapOn: "Prompts"
+- extendedWaitUntil:
+    visible:
+      id: "prompt-library"
+    timeout: 30000
+- assertVisible: "Open Smoke prompt"
