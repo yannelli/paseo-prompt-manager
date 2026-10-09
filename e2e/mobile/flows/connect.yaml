@@ -28,6 +28,6 @@ appId: sh.paseo
     id: direct-host-submit
 - extendedWaitUntil:
     visible:
-      id: message-input-root
+      id: menu-button
     timeout: 90000
 - takeScreenshot: connect-03-home
