@@ -14,51 +14,84 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # macOS temp dirs sit behind the /var symlink, which the plugin refuses as a library path.
-  PROMPT_E2E_TMP: /Users/runner/work/_temp
   MAESTRO_VERSION: 2.11.0
   MAESTRO_SHA256: 5384593cb4e7a106489e75a821d157dd43f4e438df6bc308b72e82c685e1283a
   IOS_BUNDLE_ID: sh.paseo
+  # The Paseo simulator app is cached under this key; it only changes with the Paseo release, Xcode, or the build recipe.
+  APP_CACHE_PATH: /Users/runner/work/_temp/paseo-app
 
 jobs:
-  ios:
-    name: iOS simulator (Maestro)
+  # No simulator build of Paseo is published, so build one from the release tag once and cache the .app.
+  build:
+    name: Build Paseo for the iOS simulator
     runs-on: macos-15
-    timeout-minutes: 110
+    timeout-minutes: 60
+    outputs:
+      cache-key: ${{ steps.key.outputs.key }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - name: Resolve versions
-        id: ver
+      - name: Resolve the cache key
+        id: key
         run: |
           paseo="$(node -p "require('./package.json').devDependencies['@getpaseo/cli']")"
           xcode="$(xcodebuild -version | tr '\n' ' ' | tr -s ' ' | sed 's/ $//; s/ /-/g')"
+          recipe="${{ hashFiles('e2e/ios/build-app.sh', 'e2e/ios/patch-host.mjs') }}"
           echo "paseo=$paseo" >> "$GITHUB_OUTPUT"
-          echo "xcode=$xcode" >> "$GITHUB_OUTPUT"
+          echo "key=paseo-ios-app-$paseo-$xcode-$recipe" >> "$GITHUB_OUTPUT"
 
-      - name: Restore simulator app
-        id: app-cache
+      - name: Restore the simulator app
+        id: cache
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
-          path: ${{ runner.temp }}/paseo-app
-          key: paseo-ios-app-${{ steps.ver.outputs.paseo }}-${{ steps.ver.outputs.xcode }}-${{ hashFiles('e2e/ios/build-app.sh') }}
+          path: ${{ env.APP_CACHE_PATH }}
+          key: ${{ steps.key.outputs.key }}
 
       - name: Node for the Paseo build
-        if: steps.app-cache.outputs.cache-hit != 'true'
+        if: steps.cache.outputs.cache-hit != 'true'
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "22"
 
-      - name: Build Paseo for the iOS simulator
-        if: steps.app-cache.outputs.cache-hit != 'true'
-        run: e2e/ios/build-app.sh "${{ steps.ver.outputs.paseo }}" "${{ runner.temp }}/paseo-app"
+      - name: Build Paseo
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: e2e/ios/build-app.sh "${{ steps.key.outputs.paseo }}" "$APP_CACHE_PATH"
 
-      - name: Save simulator app
-        if: steps.app-cache.outputs.cache-hit != 'true'
+      - name: Save the simulator app
+        if: steps.cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
-          path: ${{ runner.temp }}/paseo-app
-          key: ${{ steps.app-cache.outputs.cache-primary-key }}
+          path: ${{ env.APP_CACHE_PATH }}
+          key: ${{ steps.key.outputs.key }}
+
+  # Each simulator launch of a Maestro flow costs about a minute, so the scenarios are spread over
+  # several runners. Every shard connects the app first, then runs its own scenarios.
+  suite:
+    name: iOS simulator (${{ matrix.shard }})
+    needs: build
+    runs-on: macos-15
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: library
+            pattern: connects the app|opens the library from|creates a prompt|saves edits|asks before discarding
+          - shard: browse
+            pattern: connects the app|archives a prompt|filters by search|imports Markdown|switches the library directory
+          - shard: agent
+            pattern: connects the app|sets up Git sync|composer pill|/prompt sends|/prompts opens
+          - shard: phone
+            pattern: connects the app|Attach Saved prompt|picker sheet|focused editor field|expanded editor|library header
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Restore the simulator app
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ env.APP_CACHE_PATH }}
+          key: ${{ needs.build.outputs.cache-key }}
+          fail-on-cache-miss: true
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
@@ -78,44 +111,38 @@ jobs:
           unzip -q "$RUNNER_TEMP/maestro.zip" -d "$RUNNER_TEMP"
           echo "$RUNNER_TEMP/maestro/bin" >> "$GITHUB_PATH"
 
-      - name: Boot simulator and install app
+      - name: Boot a simulator and install the app
         run: |
           udid="$(xcrun simctl list devices available -j | node -e '
-            const d = JSON.parse(require("fs").readFileSync(0, "utf8")).devices;
-            const runtimes = Object.keys(d).filter((k) => k.includes("iOS")).sort();
-            for (const r of runtimes.reverse()) {
-              const m = d[r].find((x) => /^iPhone 16( |$)/.test(x.name) && !/Plus|Pro|e/.test(x.name.replace("iPhone 16","")));
-              if (m) { console.log(m.udid); break; }
+            const devices = JSON.parse(require("fs").readFileSync(0, "utf8")).devices;
+            for (const runtime of Object.keys(devices).filter((key) => key.includes("iOS")).sort().reverse()) {
+              const match = devices[runtime].find((device) => device.name === "iPhone 16");
+              if (match) { console.log(match.udid); break; }
             }')"
           test -n "$udid" || { xcrun simctl list devices available; exit 1; }
           echo "SIM_UDID=$udid" >> "$GITHUB_ENV"
-          # The soft keyboard only shows when the simulator does not use the Mac keyboard.
-          defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool false
           xcrun simctl bootstatus "$udid" -b
-          app="$(ls -d "$RUNNER_TEMP"/paseo-app/*.app | head -1)"
-          xcrun simctl install "$udid" "$app"
+          xcrun simctl install "$udid" "$(ls -d "$APP_CACHE_PATH"/*.app | head -1)"
           xcrun simctl get_app_container "$udid" "$IOS_BUNDLE_ID"
-
-      - run: maestro --version
+          maestro --version
 
       - name: Run the iOS E2E suite
-        timeout-minutes: 75
         run: bash e2e/mobile/ci-run.sh
         env:
           PROMPT_E2E_PLATFORM: ios
           PROMPT_E2E_APP_ID: ${{ env.IOS_BUNDLE_ID }}
           PROMPT_E2E_DEVICE: ${{ env.SIM_UDID }}
-          # Narrow a debugging run to scenarios whose title matches.
-          PROMPT_E2E_PATTERN: ""
+          PROMPT_E2E_PATTERN: ${{ matrix.pattern }}
+          # macOS temp directories sit behind the /var symlink, which the plugin refuses as a library path.
+          PROMPT_E2E_TMP: /Users/runner/work/_temp
 
       - if: ${{ !cancelled() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: e2e-ios-results
+          name: e2e-ios-results-${{ matrix.shard }}
           path: |
             e2e/.results/
             /Users/runner/.maestro/tests/
           include-hidden-files: true
           retention-days: 14
           if-no-files-found: ignore
-

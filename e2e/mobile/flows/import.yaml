@@ -11,7 +11,17 @@ appId: sh.paseo
 - pressKey: Enter
 - inputText: ${IMPORT_DIR}
 # The import button sits below the field, where the keyboard would cover it.
-- hideKeyboard
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - hideKeyboard
+# iOS has no key that dismisses a multiline field; a tap on the static heading ends the editing.
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - tapOn: Import prompts
 - scrollUntilVisible:
     element: Import 2 paths
     direction: DOWN

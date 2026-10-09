@@ -12,16 +12,19 @@ appId: sh.paseo
     direction: DOWN
 - tapOn: Prompt description.*
 - inputText: Draft release notes from merged PRs
+- runFlow: lib/hide-keyboard.yaml
 - scrollUntilVisible:
     element: Prompt tags
     direction: DOWN
 - tapOn: Prompt tags
 - inputText: writing, release
+- runFlow: lib/hide-keyboard.yaml
 - scrollUntilVisible:
     element: Create editor subfolder
     direction: DOWN
 - tapOn: Create editor subfolder
 - inputText: team/docs
+- runFlow: lib/hide-keyboard.yaml
 - tapOn: Create folder
 - extendedWaitUntil:
     visible: Select folder team/docs

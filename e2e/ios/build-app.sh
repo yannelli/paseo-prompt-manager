@@ -6,12 +6,14 @@ set -euo pipefail
 
 version="${1:?paseo version}"
 out="${2:?output dir}"
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 work="${PASEO_SRC_DIR:-${RUNNER_TEMP:-/tmp}/paseo-src}"
 
 rm -rf "$work"
 git clone --depth 1 --branch "v${version}" https://github.com/getpaseo/paseo.git "$work"
 cd "$work"
 
+node "$here/patch-host.mjs" "$work"
 node scripts/npm-retry.mjs ci
 npm run build:app-deps
 
