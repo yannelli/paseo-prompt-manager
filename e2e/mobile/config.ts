@@ -23,7 +23,7 @@ export const maestroEnv = (): NodeJS.ProcessEnv => ({
   ...process.env,
   MAESTRO_CLI_NO_ANALYTICS: "1",
   MAESTRO_CLI_ANALYSIS_NOTIFICATION_DISABLED: "true",
-  ...(platform === "ios" ? { MAESTRO_DRIVER_STARTUP_TIMEOUT: "240000" } : {}),
+  ...(platform === "ios" ? { MAESTRO_DRIVER_STARTUP_TIMEOUT: "600000" } : {}),
 });
 
 /** Global Maestro options that select the device. */

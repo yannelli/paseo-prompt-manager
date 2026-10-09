@@ -24,7 +24,12 @@ appId: sh.paseo
     direction: DOWN
 - tapOn: Create editor subfolder
 - inputText: team/docs
-- runFlow: lib/hide-keyboard.yaml
+# iOS: hideKeyboard cannot find a dismiss key for this field; Return ends the editing.
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - pressKey: Enter
 - tapOn: Create folder
 - extendedWaitUntil:
     visible: Select folder team/docs

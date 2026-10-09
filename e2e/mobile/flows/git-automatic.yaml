@@ -5,4 +5,10 @@ appId: sh.paseo
     direction: DOWN
     timeout: 30000
 - tapOn: Automatic
+# iOS: the first tap only ends the editing of the field that was last focused.
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - tapOn: Automatic
 - takeScreenshot: git-automatic

@@ -5,7 +5,7 @@ import { resetMaestroDriver, stopIosDriver } from "./device.ts";
 import { appId, flowsSource, maestroBin, maestroEnv, maestroTarget, platform, resultsDir } from "./config.ts";
 
 const renderedFlows = join(resultsDir, "flows");
-const FLOW_TIMEOUT_MS = 4 * 60_000;
+const FLOW_TIMEOUT_MS = (platform === "ios" ? 12 : 4) * 60_000;
 let invocations = 0;
 export const FLOW_END_LABEL = "e2e-flow-end";
 export const FLOW_END_STEP = `- assertTrue:\n    condition: \${true}\n    label: ${FLOW_END_LABEL}`;
@@ -67,7 +67,7 @@ async function attemptFlow(name: string, label: string, env: Record<string, stri
   // On iOS Maestro sometimes never exits after its last command, while it stops the XCUITest driver.
   // The sentinel step is the last one of every flow, so its finished line at the end of the output
   // means the flow passed and only the shutdown hangs. A flow that stalls earlier never gets there.
-  // The driver is also given 150 s to print its first line; a start that never answers is killed early.
+  // The driver is also given 11 minutes to print its first line; a start that never answers is killed early.
   let hungAfterFlow = false;
   let killedByUs = false;
   const startedAt = Date.now();
@@ -78,7 +78,7 @@ async function attemptFlow(name: string, label: string, env: Record<string, stri
         hungAfterFlow = true;
         killedByUs = true;
         child.kill("SIGKILL");
-      } else if (!text && Date.now() - startedAt > 150_000) {
+      } else if (!text && Date.now() - startedAt > 660_000) {
         killedByUs = true;
         child.kill("SIGKILL");
       }

@@ -7,8 +7,8 @@ import { maestroBin, maestroEnv, maestroTarget } from "../mobile/config.ts";
 import { resetMaestroDriver, stopIosDriver } from "../mobile/device.ts";
 import { flowEnded } from "../mobile/maestro.ts";
 
-const ATTEMPTS = 3;
-const ATTEMPT_TIMEOUT_MS = 5 * 60_000;
+const ATTEMPTS = 2;
+const ATTEMPT_TIMEOUT_MS = 12 * 60_000;
 
 async function attempt(): Promise<boolean> {
   const child = spawn(maestroBin, [...maestroTarget(), "--no-ansi", "test", join(import.meta.dirname, "warm-up.yaml")], { env: maestroEnv(), stdio: ["ignore", "pipe", "pipe"] });
