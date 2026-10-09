@@ -99,6 +99,7 @@ jobs:
           node e2e/ios/smoke.ts
 
       - name: Run the iOS E2E suite
+        timeout-minutes: 30
         run: bash e2e/mobile/ci-run.sh
         env:
           PROMPT_E2E_PLATFORM: ios
