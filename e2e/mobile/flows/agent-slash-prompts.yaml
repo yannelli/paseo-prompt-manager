@@ -1,7 +1,7 @@
 appId: sh.paseo
 ---
 - runFlow: lib/open-agent.yaml
-- tapOn: Message agent...
+- tapOn: Message agent.*
 - inputText: /prompts
 - tapOn: Send message
 - extendedWaitUntil:

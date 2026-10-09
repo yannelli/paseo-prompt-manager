@@ -16,7 +16,7 @@ appId: sh.paseo
     visible:
       id: composer-plugin-resource-attachment-pill
     timeout: 20000
-- tapOn: Message agent...
+- tapOn: Message agent.*
 - inputText: Use the attached checklist.
 - tapOn: Send message
 - takeScreenshot: attach-sent

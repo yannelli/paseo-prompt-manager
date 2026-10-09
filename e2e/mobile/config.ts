@@ -18,7 +18,13 @@ export const flowsSource = join(import.meta.dirname, "flows");
 /** The device under test: adb serial or simulator UDID. Filled in from `adb devices` when unset on Android. */
 export const target: { serial: string | undefined } = { serial: process.env.PROMPT_E2E_DEVICE || undefined };
 
-export const maestroEnv = (): NodeJS.ProcessEnv => ({ ...process.env, MAESTRO_CLI_NO_ANALYTICS: "1", MAESTRO_CLI_ANALYSIS_NOTIFICATION_DISABLED: "true" });
+// The iOS XCUITest driver is built and launched by xcodebuild on every Maestro start; a loaded CI Mac can take longer than the default 120 s.
+export const maestroEnv = (): NodeJS.ProcessEnv => ({
+  ...process.env,
+  MAESTRO_CLI_NO_ANALYTICS: "1",
+  MAESTRO_CLI_ANALYSIS_NOTIFICATION_DISABLED: "true",
+  ...(platform === "ios" ? { MAESTRO_DRIVER_STARTUP_TIMEOUT: "240000" } : {}),
+});
 
 /** Global Maestro options that select the device. */
 export const maestroTarget = (): string[] => ["--platform", platform, ...(target.serial ? ["--udid", target.serial] : [])];
