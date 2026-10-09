@@ -12,7 +12,7 @@ appId: sh.paseo
     direction: DOWN
 - tapOn: Prompt description.*
 - inputText: Draft release notes from merged PRs
-- runFlow: lib/hide-keyboard.yaml
+- runFlow: lib/hide-keyboard-multiline.yaml
 - scrollUntilVisible:
     element: Prompt tags
     direction: DOWN

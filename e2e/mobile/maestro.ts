@@ -7,6 +7,9 @@ import { appId, flowsSource, maestroBin, maestroEnv, maestroTarget, platform, re
 const renderedFlows = join(resultsDir, "flows");
 const FLOW_TIMEOUT_MS = 4 * 60_000;
 let invocations = 0;
+export const FLOW_END_LABEL = "e2e-flow-end";
+export const FLOW_END_STEP = `- assertTrue:\n    condition: \${true}\n    label: ${FLOW_END_LABEL}`;
+export const flowEnded = (output: string): boolean => new RegExp(`${FLOW_END_LABEL}[^\\n]*COMPLETED\\n$`).test(output) && !/FAILED|Exception/.test(output);
 let reinstallDriver = true;
 
 /** Copies the flows next to the results, pointing them at the app id under test. */
@@ -14,11 +17,13 @@ export async function renderFlows(): Promise<void> {
   await rm(resultsDir, { recursive: true, force: true });
   await mkdir(resultsDir, { recursive: true });
   await cp(flowsSource, renderedFlows, { recursive: true });
-  if (appId === "sh.paseo") return;
   for (const entry of await readdir(renderedFlows, { recursive: true })) {
     if (!entry.endsWith(".yaml")) continue;
     const file = join(renderedFlows, entry);
-    await writeFile(file, (await readFile(file, "utf8")).replace(/^appId: sh\.paseo$/m, `appId: ${appId}`));
+    let source = (await readFile(file, "utf8")).replace(/^appId: sh\.paseo$/m, `appId: ${appId}`);
+    // Every flow ends with a labelled step, so a Maestro that hangs on shutdown can be told from one that stalled midway.
+    if (!entry.startsWith("lib/")) source = `${source.trimEnd()}\n${FLOW_END_STEP}\n`;
+    await writeFile(file, source);
   }
 }
 
@@ -60,14 +65,21 @@ async function attemptFlow(name: string, label: string, env: Record<string, stri
   child.stderr.on("data", collect);
   const timer = setTimeout(() => child.kill("SIGKILL"), FLOW_TIMEOUT_MS);
   // On iOS Maestro sometimes never exits after its last command, while it stops the XCUITest driver.
-  // Maestro writes a command's line when it starts and appends the status when it ends, so output that
-  // stops at a finished line with no failure means the flow is over and only the shutdown hangs.
+  // The sentinel step is the last one of every flow, so its finished line at the end of the output
+  // means the flow passed and only the shutdown hangs. A flow that stalls earlier never gets there.
+  // The driver is also given 150 s to print its first line; a start that never answers is killed early.
   let hungAfterFlow = false;
+  let killedByUs = false;
+  const startedAt = Date.now();
   const watchdog = platform === "ios"
     ? setInterval(() => {
       const text = log.join("");
-      if (Date.now() - lastData > 60_000 && /(COMPLETED|SKIPPED)\n$/.test(text) && !/FAILED|Exception/.test(text)) {
+      if (Date.now() - lastData > 45_000 && flowEnded(text)) {
         hungAfterFlow = true;
+        killedByUs = true;
+        child.kill("SIGKILL");
+      } else if (!text && Date.now() - startedAt > 150_000) {
+        killedByUs = true;
         child.kill("SIGKILL");
       }
     }, 5_000)
@@ -83,7 +95,7 @@ async function attemptFlow(name: string, label: string, env: Record<string, stri
     code = 0;
     log.push("\n[e2e] Maestro finished the flow but did not exit; stopped it.\n");
   }
-  if (platform === "ios") await stopIosDriver();
+  if (platform === "ios" && (killedByUs || code === null)) await stopIosDriver();
   reinstallDriver = code !== 0;
   const output = log.join("");
   await writeFile(join(out, "maestro.log"), `maestro ${args.join(" ")}\n\n${output}`);

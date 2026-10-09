@@ -1,0 +1,15 @@
+appId: sh.paseo
+---
+# iOS only, multiline field: no return key dismisses it. The editor's "Hide keyboard" button does, and it
+# scrolls away with the header, so bring it back first.
+- runFlow:
+    when:
+      platform: iOS
+      visible: return
+    commands:
+      - scrollUntilVisible:
+          element: Hide keyboard
+          direction: UP
+          timeout: 15000
+      - tapOn: Hide keyboard
+      - waitForAnimationToEnd

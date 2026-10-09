@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { maestroBin, maestroEnv, maestroTarget } from "../mobile/config.ts";
 import { resetMaestroDriver, stopIosDriver } from "../mobile/device.ts";
+import { flowEnded } from "../mobile/maestro.ts";
 
 const ATTEMPTS = 3;
 const ATTEMPT_TIMEOUT_MS = 5 * 60_000;
@@ -27,7 +28,7 @@ async function attempt(): Promise<boolean> {
     const winner = await Promise.race([exited, sleep(5_000).then(() => "tick" as const)]);
     if (winner !== "tick") return winner === 0;
     // Maestro can hang while stopping the driver after its last command; see e2e/mobile/maestro.ts.
-    if (Date.now() - lastData > 60_000 && /(COMPLETED|SKIPPED)\n$/.test(output) && !/FAILED|Exception/.test(output)) finished = true;
+    if (Date.now() - lastData > 45_000 && flowEnded(output)) finished = true;
     if (finished || Date.now() - started > ATTEMPT_TIMEOUT_MS) {
       child.kill("SIGKILL");
       await exited;
