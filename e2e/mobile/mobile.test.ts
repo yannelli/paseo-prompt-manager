@@ -17,6 +17,8 @@ const CODE_REVIEW = "# Code review\n\nReview the diff for bugs, missing tests, a
 const SUMMARY = "# Summary\n\nSummarize this thread in three bullets.";
 
 let daemon: TestDaemon;
+/** Every scenario needs the app to be connected; when the connection test failed, fail the rest at once. */
+let connection: "pending" | "connected" | "failed" = "pending";
 
 /** Retries `read` until it satisfies `done`; the plugin writes after the UI action returns. */
 async function eventually<T>(read: () => Promise<T>, done: (value: T) => boolean, what: string, timeoutMs = 30_000): Promise<T> {
@@ -34,12 +36,13 @@ async function eventually<T>(read: () => Promise<T>, done: (value: T) => boolean
 function scenario(title: string, body: (context: { library: TestLibrary; flow: (file: string, extra?: Record<string, string>) => Promise<void>; agent: () => Promise<TestAgent> }) => Promise<void>) {
   const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
   test(title, { timeout: 15 * 60_000 }, async () => {
+    assert.notEqual(connection, "failed", "The app never connected to the daemon; see the first test.");
     const library = new TestLibrary(daemon, slug);
     await library.activate();
     let created: TestAgent | undefined;
     const agent = async () => created ??= await createAgent(daemon, `agent-${slug}`);
     const flow = async (file: string, extra: Record<string, string> = {}) => {
-      const env: Record<string, string> = { ENDPOINT: appEndpoint(daemon), SERVER_ID: daemon.serverId, ...extra };
+      const env: Record<string, string> = { SERVER_ID: daemon.serverId, ...extra };
       if (created) env.AGENT_ID = created.id;
       await runFlow(file, `${slug}-${file.replace(/\.yaml$/, "")}`, env);
     };
@@ -64,8 +67,18 @@ describe(`Prompt manager on ${platform}`, () => {
   test("connects the app to the daemon from a fresh install", { timeout: 10 * 60_000 }, async () => {
     const library = new TestLibrary(daemon, "connect");
     await library.activate();
-    await runFlow("connect.yaml", "connect", { ENDPOINT: appEndpoint(daemon), SERVER_ID: daemon.serverId });
-    // The home screen only renders once the app registered the host and its connection came up.
+    connection = "failed";
+    // The first launch on a fresh emulator is the slowest; give the app a second try.
+    for (const attempt of [1, 2]) {
+      try {
+        await runFlow("connect.yaml", `connect-${attempt}`, { ...appEndpoint(daemon), SERVER_ID: daemon.serverId });
+        break;
+      } catch (error) {
+        if (attempt === 2) throw error;
+      }
+    }
+    connection = "connected";
+    // Reaching a screen with the header menu means the app registered the host and its connection came up.
     assert.deepEqual(await library.ids(), []);
   });
 

@@ -30,9 +30,9 @@ async function adb(args: string[], timeout = 60_000): Promise<string> {
   return stdout;
 }
 
-/** Address the app uses for the test daemon. The Android emulator reaches it through `adb reverse`. */
-export function appEndpoint(daemon: TestDaemon): string {
-  return `127.0.0.1:${daemon.port}`;
+/** Host and port the app's direct connection form takes. The Android emulator reaches the daemon through `adb reverse`. */
+export function appEndpoint(daemon: TestDaemon): { HOST: string; PORT: string } {
+  return { HOST: "127.0.0.1", PORT: String(daemon.port) };
 }
 
 /**
@@ -50,6 +50,8 @@ export async function prepareDevice(daemon: TestDaemon): Promise<void> {
     await adb(["reverse", `tcp:${daemon.port}`, `tcp:${daemon.port}`]);
     // Show the soft keyboard even though the emulator reports a hardware keyboard.
     await adb(["shell", "settings", "put", "secure", "show_ime_with_hard_keyboard", "1"]);
+    // A busy CI emulator makes system apps miss ANR deadlines; the dialog would cover the app under test.
+    await adb(["shell", "settings", "put", "global", "hide_error_dialogs", "1"]);
     if (appPath) await adb(["install", "-r", "-g", "-t", appPath], 600_000);
     const installed = await adb(["shell", "pm", "list", "packages", appId]);
     if (!installed.split("\n").some((line) => line.trim() === `package:${appId}`)) {

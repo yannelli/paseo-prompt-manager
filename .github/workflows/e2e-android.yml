@@ -42,9 +42,9 @@ jobs:
         id: paseo
         run: echo "version=$(node -p "require('./package.json').devDependencies['@getpaseo/cli']")" >> "$GITHUB_OUTPUT"
 
-      - name: Cache the Paseo APK
+      - name: Restore the Paseo APK
         id: apk-cache
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ${{ runner.temp }}/paseo-android
           key: paseo-android-apk-${{ steps.paseo.outputs.version }}
@@ -54,6 +54,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.paseo.outputs.version }}
         run: gh release download "v$VERSION" -R getpaseo/paseo -p "paseo-v$VERSION-android.apk" -D "$RUNNER_TEMP/paseo-android"
+      - name: Save the Paseo APK
+        if: steps.apk-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ runner.temp }}/paseo-android
+          key: paseo-android-apk-${{ steps.paseo.outputs.version }}
       - name: Check the APK
         id: apk
         env:
@@ -81,9 +87,9 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-      - name: Cache the AVD
+      - name: Restore the AVD
         id: avd-cache
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
             ~/.android/avd/*
@@ -105,6 +111,14 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
           script: echo "Generated the AVD snapshot for caching."
+      - name: Save the AVD
+        if: steps.avd-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-${{ env.ANDROID_API }}-${{ env.ANDROID_TARGET }}-${{ env.ANDROID_ARCH }}-${{ env.ANDROID_PROFILE }}-v1
 
       - name: Run the Android E2E suite
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
@@ -133,5 +147,6 @@ jobs:
         with:
           name: e2e-android-results
           path: e2e/.results/
+          include-hidden-files: true
           retention-days: 14
           if-no-files-found: ignore

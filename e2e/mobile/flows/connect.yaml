@@ -16,18 +16,30 @@ appId: sh.paseo
     visible:
       id: add-host-modal
     timeout: 15000
+- extendedWaitUntil:
+    visible:
+      id: direct-host-input
+    timeout: 15000
+- waitForAnimationToEnd
 - tapOn:
     id: direct-host-input
 - eraseText
-- inputText: ${ENDPOINT}
+- inputText: ${HOST}
+- tapOn:
+    id: direct-port-input
+- eraseText
+- inputText: ${PORT}
 - assertVisible:
     id: direct-host-input
-    text: ${ENDPOINT}
+    text: ${HOST}
+- assertVisible:
+    id: direct-port-input
+    text: ${PORT}
 - takeScreenshot: connect-02-form
 - tapOn:
     id: direct-host-submit
 - extendedWaitUntil:
     visible:
-      id: message-input-root
+      id: menu-button
     timeout: 90000
 - takeScreenshot: connect-03-home

@@ -1,10 +1,11 @@
 appId: sh.paseo
 ---
-# Restarts the installed app (data kept) and waits for the connected home screen.
+# Restarts the installed app (data kept) and waits for a connected screen. With no projects the
+# home route is the open-project screen, which has the header menu button but no composer.
 - launchApp:
     permissions:
       all: allow
 - extendedWaitUntil:
     visible:
-      id: message-input-root
+      id: menu-button
     timeout: 90000
