@@ -1,0 +1,20 @@
+appId: sh.paseo
+---
+- runFlow: lib/open-library.yaml
+- assertVisible: Markdown prompts shared across agents on this host\.
+- tapOn: Open Standup
+- extendedWaitUntil:
+    visible: Prompt Markdown.*
+    timeout: 15000
+- assertNotVisible: Markdown prompts shared across agents on this host\.
+- assertNotVisible: Open Standup
+- tapOn: Back to library
+- extendedWaitUntil:
+    visible: Markdown prompts shared across agents on this host\.
+    timeout: 15000
+- tapOn: Settings
+- extendedWaitUntil:
+    visible: Library settings
+    timeout: 15000
+- assertNotVisible: Markdown prompts shared across agents on this host\.
+- takeScreenshot: mobile-header-settings

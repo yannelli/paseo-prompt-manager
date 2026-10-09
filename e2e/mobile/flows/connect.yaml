@@ -1,0 +1,56 @@
+appId: sh.paseo
+---
+# Fresh install: welcome screen -> direct connection form -> host added -> home screen.
+- launchApp:
+    clearState: true
+    permissions:
+      all: allow
+- runFlow: lib/dismiss-anr.yaml
+- extendedWaitUntil:
+    visible:
+      id: welcome-screen
+    timeout: 120000
+- takeScreenshot: connect-01-welcome
+- tapOn:
+    id: welcome-direct-connection
+- extendedWaitUntil:
+    visible:
+      id: add-host-modal
+    timeout: 15000
+- waitForAnimationToEnd
+# On a loaded emulator the sheet sometimes stays collapsed at the bottom edge; drag it open.
+- runFlow:
+    when:
+      notVisible:
+        id: direct-host-input
+    commands:
+      - swipe:
+          start: 50%,94%
+          end: 50%,40%
+          duration: 500
+- extendedWaitUntil:
+    visible:
+      id: direct-host-input
+    timeout: 30000
+- tapOn:
+    id: direct-host-input
+- eraseText
+- inputText: ${HOST}
+- tapOn:
+    id: direct-port-input
+- eraseText
+- inputText: ${PORT}
+- assertVisible:
+    id: direct-host-input
+    text: ${HOST}
+- assertVisible:
+    id: direct-port-input
+    text: ${PORT}
+- takeScreenshot: connect-02-form
+- tapOn:
+    id: direct-host-submit
+- extendedWaitUntil:
+    visible:
+      id: menu-button
+    timeout: 90000
+- takeScreenshot: connect-03-home

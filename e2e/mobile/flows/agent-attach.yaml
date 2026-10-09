@@ -1,0 +1,22 @@
+appId: sh.paseo
+---
+- runFlow: lib/open-agent.yaml
+- tapOn:
+    id: message-input-attach-button
+- extendedWaitUntil:
+    visible: Attach Saved prompt
+    timeout: 15000
+- tapOn: Attach Saved prompt
+- extendedWaitUntil:
+    visible: ".*Code review.*"
+    timeout: 30000
+- takeScreenshot: attach-picker
+- tapOn: ".*Code review.*"
+- extendedWaitUntil:
+    visible:
+      id: composer-plugin-resource-attachment-pill
+    timeout: 20000
+- tapOn: Message agent...
+- inputText: Use the attached checklist.
+- tapOn: Send message
+- takeScreenshot: attach-sent

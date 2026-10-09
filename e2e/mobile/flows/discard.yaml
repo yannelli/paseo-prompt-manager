@@ -1,0 +1,37 @@
+appId: sh.paseo
+---
+- runFlow: lib/open-library.yaml
+- tapOn: Open Triage
+- extendedWaitUntil:
+    visible: Prompt Markdown.*
+    timeout: 15000
+- tapOn: Prompt Markdown.*
+- runFlow: lib/select-all.yaml
+- eraseText
+- inputText: "# Triage"
+- pressKey: Enter
+- pressKey: Enter
+- inputText: Label and assign new issues.
+- scrollUntilVisible:
+    element: Discard draft
+    direction: UP
+    timeout: 30000
+- tapOn: Discard draft
+- extendedWaitUntil:
+    visible: Discard unsaved changes\?
+    timeout: 15000
+- takeScreenshot: discard-dialog
+- tapOn: Cancel
+- assertNotVisible: Discard unsaved changes\?
+- assertVisible: Unsaved changes
+- assertVisible: ".*Label and assign new issues.*"
+- tapOn: Discard draft
+- extendedWaitUntil:
+    visible: Discard unsaved changes\?
+    timeout: 15000
+- tapOn: Discard changes
+- extendedWaitUntil:
+    visible: ".*Label new issues.*"
+    timeout: 15000
+- assertNotVisible: ".*assign.*"
+- assertVisible: Saved

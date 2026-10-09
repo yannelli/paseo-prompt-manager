@@ -1,0 +1,16 @@
+appId: sh.paseo
+---
+# Edits the open prompt and saves it as a new version.
+- runFlow: lib/open-library.yaml
+- tapOn: Open Standup
+- extendedWaitUntil:
+    visible: Prompt Markdown.*
+    timeout: 15000
+- tapOn: Prompt Markdown.*
+- runFlow: lib/select-all.yaml
+- eraseText
+- inputText: "# Standup"
+- pressKey: Enter
+- pressKey: Enter
+- inputText: List what changed yesterday and what is blocked.
+- runFlow: lib/save.yaml

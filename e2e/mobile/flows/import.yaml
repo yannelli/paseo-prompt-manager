@@ -1,0 +1,34 @@
+appId: sh.paseo
+---
+- runFlow: lib/open-library.yaml
+- tapOn: Import
+- extendedWaitUntil:
+    visible: Markdown file or folder paths.*
+    timeout: 15000
+- tapOn: Select folder imported
+- tapOn: Markdown file or folder paths.*
+- inputText: ${IMPORT_FILE}
+- pressKey: Enter
+- inputText: ${IMPORT_DIR}
+# The import button sits below the field, where the keyboard would cover it.
+- hideKeyboard
+- scrollUntilVisible:
+    element: Import 2 paths
+    direction: DOWN
+    timeout: 30000
+- tapOn: Import 2 paths
+- extendedWaitUntil:
+    visible: 3 imported.*1 skipped
+    timeout: 30000
+- takeScreenshot: import-result
+- scrollUntilVisible:
+    element: Back to library
+    direction: UP
+    timeout: 30000
+- tapOn: Back to library
+- extendedWaitUntil:
+    visible: Open Bug report
+    timeout: 20000
+- assertVisible: Open Onboarding
+- assertVisible: Open Handoff
+- assertVisible: Open Keep

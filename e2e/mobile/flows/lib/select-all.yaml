@@ -1,0 +1,5 @@
+appId: sh.paseo
+---
+# Tapping a field puts the cursor under the finger, and eraseText only deletes before it. Ask the
+# runner to select the whole text with the keyboard shortcut so the next input replaces it.
+- evalScript: ${http.get('http://127.0.0.1:' + HOOK_PORT + '/select-all')}

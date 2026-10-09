@@ -1,0 +1,15 @@
+appId: sh.paseo
+---
+# Focuses the Markdown field; leaves the keyboard up.
+- scrollUntilVisible:
+    element: Prompt Markdown.*
+    direction: DOWN
+    visibilityPercentage: 20
+- tapOn: Prompt Markdown.*
+- inputText: "# Keyboard check"
+- pressKey: Enter
+- pressKey: Enter
+- inputText: One line.
+- pressKey: Enter
+- inputText: Another line.
+- waitForAnimationToEnd

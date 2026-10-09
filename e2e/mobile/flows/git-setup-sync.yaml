@@ -1,0 +1,33 @@
+appId: sh.paseo
+---
+- scrollUntilVisible:
+    element: Git remote URL
+    direction: DOWN
+    timeout: 30000
+- tapOn: Git remote URL
+- eraseText
+- inputText: ${REMOTE}
+# Without this the keyboard still covers the branch field when the scroll stops on iOS, and the tap lands on a key.
+- hideKeyboard
+- scrollUntilVisible:
+    element: Git branch
+    direction: DOWN
+    timeout: 30000
+- tapOn: Git branch
+- eraseText
+- inputText: main
+- hideKeyboard
+- scrollUntilVisible:
+    element: Set up
+    direction: DOWN
+    timeout: 30000
+- tapOn: Set up
+- extendedWaitUntil:
+    visible: Initialized
+    timeout: 30000
+- takeScreenshot: git-initialized
+- scrollUntilVisible:
+    element: Sync now
+    direction: DOWN
+    timeout: 30000
+- tapOn: Sync now
