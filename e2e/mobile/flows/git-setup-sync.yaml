@@ -5,6 +5,13 @@ appId: sh.paseo
     direction: DOWN
     timeout: 30000
 - tapOn: Git remote URL
+# iOS: a tap that only ended the previous editing leaves the field unfocused; tap again until the keyboard is up.
+- runFlow:
+    when:
+      platform: iOS
+      notVisible: return
+    commands:
+      - tapOn: Git remote URL
 - eraseText
 - inputText: ${REMOTE}
 # Without this the keyboard still covers the branch field when the scroll stops on iOS, and the tap lands on a key.
@@ -14,6 +21,13 @@ appId: sh.paseo
     direction: DOWN
     timeout: 30000
 - tapOn: Git branch
+# iOS: a tap that only ended the previous editing leaves the field unfocused; tap again until the keyboard is up.
+- runFlow:
+    when:
+      platform: iOS
+      notVisible: return
+    commands:
+      - tapOn: Git branch
 - eraseText
 - inputText: main
 - hideKeyboard

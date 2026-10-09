@@ -3,6 +3,18 @@ appId: sh.paseo
 - runFlow: lib/open-agent.yaml
 - tapOn:
     id: message-input-attach-button
+# iOS: a tap that only ended the composer editing does not open the menu; tap again.
+- extendedWaitUntil:
+    visible: Attach Saved prompt
+    timeout: 4000
+    optional: true
+- runFlow:
+    when:
+      platform: iOS
+      notVisible: Attach Saved prompt
+    commands:
+      - tapOn:
+          id: message-input-attach-button
 - extendedWaitUntil:
     visible: Attach Saved prompt
     timeout: 15000

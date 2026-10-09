@@ -1,5 +1,6 @@
 appId: sh.paseo
 ---
+- runFlow: lib/hide-keyboard-multiline.yaml
 # Restores Version 1 of the open prompt as a new revision.
 - scrollUntilVisible:
     element: Version history
