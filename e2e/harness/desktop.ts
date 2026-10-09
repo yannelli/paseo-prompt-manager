@@ -1,43 +1,93 @@
+import { spawn, type ChildProcess } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
+import { createServer } from "node:net";
 import { join } from "node:path";
-import { _electron, type ElectronApplication, type Page } from "@playwright/test";
+import { chromium, type Browser, type Page } from "@playwright/test";
 import type { TestDaemon } from "./daemon.ts";
 
 export interface DesktopClient {
-  app: ElectronApplication;
+  /** The Paseo desktop process (Electron main). */
+  app: ChildProcess;
   page: Page;
   /** Origin of the renderer, used to build in-app routes. */
   origin: string;
   close(): Promise<void>;
 }
 
+const RENDERER_ORIGIN = "paseo://app";
+
+async function freePort(): Promise<number> {
+  return await new Promise((resolve, reject) => {
+    const server = createServer();
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const { port } = server.address() as { port: number };
+      server.close(() => resolve(port));
+    });
+  });
+}
+
+function exited(child: ChildProcess): boolean {
+  return child.exitCode !== null || child.signalCode !== null;
+}
+
 /**
- * Launches the packaged Paseo desktop app named by PASEO_DESKTOP_BIN. The app attaches to the
- * running daemon recorded in the test daemon's PASEO_HOME instead of starting its own.
+ * Launches the packaged Paseo desktop app named by PASEO_DESKTOP_BIN and drives its renderer over
+ * the Chrome DevTools Protocol (packaged builds do not accept Playwright's Node inspector). The app
+ * attaches to the running daemon recorded in the test daemon's PASEO_HOME instead of starting its own.
+ * Needs a display: run under xvfb-run on headless Linux.
  */
 export async function launchDesktop(daemon: TestDaemon): Promise<DesktopClient> {
   const executablePath = process.env.PASEO_DESKTOP_BIN;
   if (!executablePath) throw new Error("Set PASEO_DESKTOP_BIN to the Paseo desktop executable. See docs/e2e.md.");
   const userData = await mkdtemp(join(daemon.root, "electron-"));
-  const app = await _electron.launch({
-    executablePath,
-    args: ["--no-sandbox"],
+  const cdpPort = await freePort();
+  const output: string[] = [];
+  const app = spawn(executablePath, ["--no-sandbox"], {
     env: {
       ...process.env,
       PASEO_HOME: daemon.home,
       PASEO_ELECTRON_USER_DATA_DIR: userData,
       PASEO_DISABLE_SINGLE_INSTANCE_LOCK: "1",
-    } as Record<string, string>,
-    timeout: 120_000,
-  });
-  const page = await app.firstWindow({ timeout: 120_000 });
-  await page.waitForLoadState("domcontentloaded");
-  const origin = new URL(page.url()).origin;
-  return {
-    app, page, origin: origin === "null" ? "paseo://app" : origin,
-    close: async () => {
-      await app.close().catch(() => undefined);
-      await rm(userData, { recursive: true, force: true });
+      PASEO_ELECTRON_FLAGS: `--no-sandbox --remote-debugging-address=127.0.0.1 --remote-debugging-port=${cdpPort}`,
     },
+    stdio: ["ignore", "pipe", "pipe"],
+    detached: true,
+  });
+  for (const stream of [app.stdout, app.stderr]) stream?.on("data", (chunk: Buffer) => {
+    output.push(chunk.toString());
+    if (output.length > 200) output.shift();
+  });
+
+  let browser: Browser | undefined;
+  const close = async () => {
+    await browser?.close().catch(() => undefined);
+    if (app.pid && !exited(app)) {
+      try { process.kill(-app.pid, "SIGTERM"); } catch { /* already gone */ }
+      await new Promise((resolve) => { app.once("exit", resolve); setTimeout(resolve, 10_000); });
+      if (!exited(app)) try { process.kill(-app.pid, "SIGKILL"); } catch { /* already gone */ }
+    }
+    await rm(userData, { recursive: true, force: true });
   };
+
+  try {
+    const deadline = Date.now() + 120_000;
+    let page: Page | undefined;
+    while (!page) {
+      if (exited(app)) throw new Error(`Paseo desktop exited early (${app.exitCode ?? app.signalCode}):\n${output.join("")}`);
+      if (Date.now() > deadline) throw new Error(`Timed out waiting for the Paseo desktop renderer:\n${output.join("")}`);
+      try {
+        browser ??= await chromium.connectOverCDP(`http://127.0.0.1:${cdpPort}`);
+        page = browser.contexts().flatMap((context) => context.pages()).find((candidate) => candidate.url().startsWith(RENDERER_ORIGIN));
+      } catch {
+        browser = undefined;
+      }
+      if (!page) await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+    await page.waitForLoadState("domcontentloaded");
+    return { app, page, origin: RENDERER_ORIGIN, close };
+  } catch (error) {
+    await close();
+    throw error;
+  }
 }
