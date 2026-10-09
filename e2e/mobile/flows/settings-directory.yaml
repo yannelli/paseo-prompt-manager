@@ -12,7 +12,10 @@ appId: sh.paseo
     when:
       platform: iOS
     commands:
-      - tripleTapOn: Prompt library directory
+      - tapOn:
+          text: Prompt library directory
+          repeat: 3
+          delay: 80
 - runFlow: lib/select-all.yaml
 - eraseText
 - inputText: ${OTHER_DIR}
