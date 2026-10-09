@@ -181,13 +181,17 @@ async function dump(label: string, args: string[]): Promise<string> {
   return out;
 }
 
-/** Bounds of the iOS keyboard (the `inputView` container in the hierarchy), or null while it is down. */
+/** Bounds of the iOS key rows and suggestion bar, or null while the software keyboard is down. */
 async function iosKeyboard(label: string): Promise<Bounds | null> {
-  const bounds = (await hierarchy(`${label}.keyboard`)).find((node) => node.id === "inputView")?.bounds;
-  return bounds && bounds.bottom > bounds.top ? bounds : null;
+  const nodes = await hierarchy(`${label}.keyboard`);
+  // `inputView` is absent on iOS 18. The key layout is exposed on both iOS 18 and 26.
+  const keys = nodes.find((node) => node.id === "UIKeyboardLayoutStar Preview")?.bounds;
+  if (!keys || keys.bottom <= keys.top) return null;
+  const suggestions = nodes.find((node) => node.id === "SystemInputAssistantView")?.bounds;
+  return { ...keys, top: suggestions ? Math.min(keys.top, suggestions.top) : keys.top };
 }
 
-/** Whether the soft keyboard is up, from `dumpsys input_method`. Null where the platform has no such check. */
+/** Whether the soft keyboard is up, from the iOS hierarchy or Android's input-method state. */
 export async function keyboardShown(label: string): Promise<boolean | null> {
   if (platform === "ios") return (await iosKeyboard(label)) !== null;
   const out = await dump(`${label}.input_method`, ["shell", "dumpsys", "input_method"]);
@@ -207,7 +211,7 @@ export async function waitForKeyboard(want: boolean, label: string, timeoutMs = 
     if (last === null || last === want) return;
     await sleep(500);
   }
-  throw new Error(`Expected the keyboard to be ${want ? "shown" : "hidden"} but dumpsys input_method says ${last}.`);
+  throw new Error(`Expected the keyboard to be ${want ? "shown" : "hidden"} but ${platform === "ios" ? "the iOS hierarchy" : "dumpsys input_method"} says ${last}.`);
 }
 
 /** Top edge of the soft keyboard in screen pixels, from the touchable region of the InputMethod window. */
