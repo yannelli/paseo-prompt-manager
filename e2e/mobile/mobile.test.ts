@@ -18,6 +18,8 @@ const CODE_REVIEW = "# Code review\n\nReview the diff for bugs, missing tests, a
 const SUMMARY = "# Summary\n\nSummarize this thread in three bullets.";
 
 let daemon: TestDaemon;
+const pattern = process.env.PROMPT_E2E_PATTERN ? new RegExp(process.env.PROMPT_E2E_PATTERN, "i") : null;
+const selected = (title: string) => !pattern || pattern.test(title);
 let hookPort = "";
 /** Every scenario needs the app to be connected; when the connection test failed, fail the rest at once. */
 let connection: "pending" | "connected" | "failed" = "pending";
@@ -37,7 +39,7 @@ async function eventually<T>(read: () => Promise<T>, done: (value: T) => boolean
 /** One scenario: a fresh library, optional agent, and a flow runner that passes the daemon to Maestro. */
 function scenario(title: string, body: (context: { library: TestLibrary; flow: (file: string, extra?: Record<string, string>) => Promise<void>; agent: () => Promise<TestAgent> }) => Promise<void>) {
   const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-  test(title, { timeout: 15 * 60_000 }, async () => {
+  test(title, { timeout: 15 * 60_000, skip: !selected(title) && "Not selected by PROMPT_E2E_PATTERN." }, async () => {
     assert.notEqual(connection, "failed", "The app never connected to the daemon; see the first test.");
     const library = new TestLibrary(daemon, slug);
     await library.activate();
@@ -68,7 +70,7 @@ after(async () => {
 });
 
 describe(`Prompt manager on ${platform}`, () => {
-  test("connects the app to the daemon from a fresh install", { timeout: 10 * 60_000 }, async () => {
+  test("connects the app to the daemon from a fresh install", { timeout: 10 * 60_000, skip: !selected("connects the app to the daemon from a fresh install") && "Not selected by PROMPT_E2E_PATTERN." }, async () => {
     const library = new TestLibrary(daemon, "connect");
     await library.activate();
     connection = "failed";
