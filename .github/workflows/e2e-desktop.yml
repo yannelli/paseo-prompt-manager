@@ -52,3 +52,4 @@ jobs:
           path: e2e/.results/
           retention-days: 14
           if-no-files-found: ignore
+          include-hidden-files: true
