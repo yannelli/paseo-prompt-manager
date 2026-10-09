@@ -4,6 +4,7 @@ appId: sh.paseo
 - scrollUntilVisible:
     element: Prompt Markdown
     direction: DOWN
+    visibilityPercentage: 20
 - tapOn: Prompt Markdown
 - inputText: "# Keyboard check"
 - pressKey: Enter

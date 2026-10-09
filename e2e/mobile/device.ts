@@ -52,6 +52,8 @@ export async function prepareDevice(daemon: TestDaemon): Promise<void> {
     await adb(["shell", "settings", "put", "secure", "show_ime_with_hard_keyboard", "1"]);
     // A busy CI emulator makes system apps miss ANR deadlines; the dialog would cover the app under test.
     await adb(["shell", "settings", "put", "global", "hide_error_dialogs", "1"]);
+    // Modern phones navigate by gesture; the emulator defaults to three buttons, which changes the bottom insets.
+    await adb(["shell", "cmd", "overlay", "enable", "com.android.internal.systemui.navbar.gestural"]);
     if (appPath) await adb(["install", "-r", "-g", "-t", appPath], 600_000);
     await waitForIdle();
     const installed = await adb(["shell", "pm", "list", "packages", appId]);

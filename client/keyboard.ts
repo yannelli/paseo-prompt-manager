@@ -17,11 +17,7 @@ export function useKeyboardInset() {
   useEffect(() => {
     if (!native) return;
     const show = (event: KeyboardEvent) => {
-      const { screenY, height } = event.endCoordinates;
-      // Paseo draws edge to edge and does not resize the window for the keyboard. React Native then reports the
-      // bottom of the visible frame as `screenY` and a `height` without the system bars, so the keyboard's top is
-      // their difference. iOS reports the top directly.
-      keyboardTop.current = Platform.OS === "android" ? screenY - height : screenY;
+      keyboardTop.current = event.endCoordinates.screenY;
       setVisible(true);
       measure();
     };
