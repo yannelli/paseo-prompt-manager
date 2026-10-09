@@ -17,11 +17,21 @@ appId: sh.paseo
     visible:
       id: add-host-modal
     timeout: 15000
+- waitForAnimationToEnd
+# On a loaded emulator the sheet sometimes stays collapsed at the bottom edge; drag it open.
+- runFlow:
+    when:
+      notVisible:
+        id: direct-host-input
+    commands:
+      - swipe:
+          start: 50%,94%
+          end: 50%,40%
+          duration: 500
 - extendedWaitUntil:
     visible:
       id: direct-host-input
-    timeout: 15000
-- waitForAnimationToEnd
+    timeout: 30000
 - tapOn:
     id: direct-host-input
 - eraseText
