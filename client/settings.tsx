@@ -1,6 +1,7 @@
 import { Icon, ScrollView, TextInput } from "@getpaseo/plugin/client/react-native";
 import { Switch, Text, View } from "react-native";
 import type { LibrarySettings, SyncMode, SyncState } from "../shared/prompts";
+import { useRevealFocusedInput } from "./keyboard";
 import { SyncModePicker } from "./sync";
 import { Banner, Button, Card, Field, IconButton, Meta, SectionTitle, inputStyle, radius, relativeTime, type Colors } from "./ui";
 
@@ -32,8 +33,9 @@ export function LibrarySettingsScreen({ colors, busy, settings, git, directory, 
   const status = git.data;
   const connectionChanged = Boolean(status && (remote.trim() !== status.remote || (branch.trim() !== "" && branch.trim() !== status.branch)));
   const blocked = busy || configDirty;
+  const reveal = useRevealFocusedInput();
   return (
-    <ScrollView keyboardShouldPersistTaps="handled" style={{ flex: 1, minWidth: 0 }} contentContainerStyle={{ gap: 14, paddingBottom: 28, width: "100%", maxWidth: 680 }}>
+    <ScrollView {...reveal} keyboardShouldPersistTaps="handled" style={{ flex: 1, minWidth: 0 }} contentContainerStyle={{ gap: 14, paddingBottom: 28, width: "100%", maxWidth: 680 }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
         <IconButton icon="ArrowLeft" label="Back to prompts" onPress={onBack} colors={colors} disabled={busy} />
         <SectionTitle title="Library settings" subtitle="Where prompts live on this host, and how they sync." colors={colors} />

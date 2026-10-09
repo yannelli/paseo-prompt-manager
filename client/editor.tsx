@@ -37,7 +37,7 @@ function FolderRow({ label, icon, depth, selected, disabled, onPress, colors, ac
 export function FolderPicker({ folders, selected, onSelect, colors, disabled, allowAll, maxHeight = 180 }: Props) {
   const choices = [...new Set(["", ...folders])].sort();
   return (
-    <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight, flexGrow: 0, minWidth: 0, borderWidth: 1, borderColor: colors.border, borderRadius: radius - 2, backgroundColor: colors.surface0 }} contentContainerStyle={{ padding: 4, gap: 1 }}>
+    <ScrollView keyboardShouldPersistTaps="handled" nestedScrollEnabled style={{ maxHeight, flexGrow: 0, minWidth: 0, borderWidth: 1, borderColor: colors.border, borderRadius: radius - 2, backgroundColor: colors.surface0 }} contentContainerStyle={{ padding: 4, gap: 1 }}>
       {allowAll && <FolderRow label="All folders" icon="Library" depth={0} selected={selected === undefined} disabled={disabled} onPress={() => onSelect(undefined)} colors={colors} accessibilityLabel="All folders" />}
       {choices.map((folder) => (
         <FolderRow
