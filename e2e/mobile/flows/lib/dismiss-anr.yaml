@@ -1,0 +1,8 @@
+appId: sh.paseo
+---
+# A busy CI emulator makes system apps miss their ANR deadline; the dialog covers the app under test.
+- runFlow:
+    when:
+      visible: ".*isn't responding.*"
+    commands:
+      - tapOn: Wait

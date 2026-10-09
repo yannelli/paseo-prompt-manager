@@ -1,0 +1,18 @@
+appId: sh.paseo
+---
+- scrollUntilVisible:
+    element: Back to prompts
+    direction: UP
+    timeout: 30000
+- tapOn: Back to prompts
+# iOS: the first tap only ends the editing of the field that was last focused.
+- runFlow:
+    when:
+      platform: iOS
+      visible: Back to prompts
+    commands:
+      - tapOn: Back to prompts
+- extendedWaitUntil:
+    visible: Open Elsewhere
+    timeout: 30000
+- assertNotVisible: Open Here

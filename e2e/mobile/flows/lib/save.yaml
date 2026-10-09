@@ -1,0 +1,30 @@
+appId: sh.paseo
+---
+# The Save row sits above the fields in the editor's single column; scroll back to it.
+- scrollUntilVisible:
+    element: Save prompt
+    direction: UP
+    timeout: 30000
+# iOS: with the keyboard up, the first tap on a button only ends the editing; dismiss the keyboard first.
+- runFlow:
+    when:
+      platform: iOS
+      visible: Hide keyboard
+    commands:
+      - tapOn: Hide keyboard
+      - waitForAnimationToEnd
+- tapOn: Save prompt
+- extendedWaitUntil:
+    visible: Saved
+    timeout: 10000
+    optional: true
+# iOS sometimes spends the first tap ending text editing. A second tap is safe: the button is
+# disabled once the prompt is saved.
+- runFlow:
+    when:
+      notVisible: Saved
+    commands:
+      - tapOn: Save prompt
+- extendedWaitUntil:
+    visible: Saved
+    timeout: 20000

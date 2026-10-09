@@ -1,0 +1,32 @@
+appId: sh.paseo
+---
+- runFlow: lib/open-agent.yaml
+- tapOn: Send a saved prompt
+- extendedWaitUntil:
+    visible: Send Code review
+    timeout: 30000
+- assertVisible: Send Summary
+- tapOn: Search saved prompts
+- inputText: thread
+- extendedWaitUntil:
+    notVisible: Send Code review
+    timeout: 15000
+- assertVisible: Send Summary
+- takeScreenshot: pill-search-thread
+- tapOn: Search saved prompts
+- eraseText
+- inputText: review
+- extendedWaitUntil:
+    visible: Send Code review
+    timeout: 15000
+- assertNotVisible: Send Summary
+- tapOn: Send Code review
+# The toast is gone by the time a slow driver looks; the sent message in the timeline stays.
+# The runner checks what the agent received.
+- extendedWaitUntil:
+    notVisible: Search saved prompts
+    timeout: 20000
+- extendedWaitUntil:
+    visible: ".*Review the diff for bugs, missing tests, and unclear names.*"
+    timeout: 30000
+- takeScreenshot: pill-sent

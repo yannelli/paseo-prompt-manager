@@ -1,0 +1,19 @@
+appId: sh.paseo
+---
+- runFlow: lib/open-library.yaml
+- tapOn: Open Retro
+- extendedWaitUntil:
+    visible: Archive prompt
+    timeout: 15000
+- tapOn: Archive prompt
+- extendedWaitUntil:
+    visible: Archive this prompt\?
+    timeout: 15000
+- takeScreenshot: archive-dialog
+- tapOn: Archive
+# Archiving closes the editor and returns to the list.
+- extendedWaitUntil:
+    visible: New prompt
+    timeout: 20000
+- assertNotVisible: Open Retro
+- takeScreenshot: archive-done

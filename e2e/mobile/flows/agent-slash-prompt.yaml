@@ -1,0 +1,7 @@
+appId: sh.paseo
+---
+- runFlow: lib/open-agent.yaml
+- tapOn: Message agent.*
+- inputText: /prompt writing/summary
+- tapOn: Send message
+- takeScreenshot: slash-prompt-sent

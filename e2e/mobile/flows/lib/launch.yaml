@@ -1,0 +1,16 @@
+appId: sh.paseo
+---
+# Restarts the installed app (data kept) and waits for a connected screen. With no projects the
+# home route is the open-project screen, which has the header menu button but no composer.
+- launchApp:
+    permissions:
+      all: allow
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - runFlow: dismiss-anr.yaml
+- extendedWaitUntil:
+    visible:
+      id: menu-button
+    timeout: 90000

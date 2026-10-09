@@ -1,0 +1,12 @@
+appId: sh.paseo
+---
+# Primes the simulator before the suite: starts Maestro's XCUITest driver and gives the app its slow first launch.
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible:
+      id: welcome-screen
+    timeout: 120000
+- assertTrue:
+    condition: ${true}
+    label: e2e-flow-end

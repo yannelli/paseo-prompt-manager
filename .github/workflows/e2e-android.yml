@@ -1,0 +1,152 @@
+name: E2E Android
+
+on:
+  pull_request:
+  push:
+    branches: [main, beta]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-android-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  MAESTRO_VERSION: 2.11.0
+  MAESTRO_SHA256: 5384593cb4e7a106489e75a821d157dd43f4e438df6bc308b72e82c685e1283a
+  ANDROID_API: 34
+  ANDROID_TARGET: google_apis
+  ANDROID_ARCH: x86_64
+  ANDROID_PROFILE: pixel_6
+
+jobs:
+  android:
+    name: Android emulator (API 34)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - run: npm ci
+
+      - name: Resolve the Paseo version
+        id: paseo
+        run: echo "version=$(node -p "require('./package.json').devDependencies['@getpaseo/cli']")" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the Paseo APK
+        id: apk-cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ runner.temp }}/paseo-android
+          key: paseo-android-apk-${{ steps.paseo.outputs.version }}
+      - name: Download the Paseo APK
+        if: steps.apk-cache.outputs.cache-hit != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.paseo.outputs.version }}
+        run: gh release download "v$VERSION" -R getpaseo/paseo -p "paseo-v$VERSION-android.apk" -D "$RUNNER_TEMP/paseo-android"
+      - name: Save the Paseo APK
+        if: steps.apk-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ runner.temp }}/paseo-android
+          key: paseo-android-apk-${{ steps.paseo.outputs.version }}
+      - name: Check the APK
+        id: apk
+        env:
+          VERSION: ${{ steps.paseo.outputs.version }}
+        run: |
+          apk="$RUNNER_TEMP/paseo-android/paseo-v$VERSION-android.apk"
+          aapt2="$(ls -d "$ANDROID_HOME"/build-tools/*/aapt2 | sort -V | tail -n1)"
+          package="$("$aapt2" dump packagename "$apk")"
+          echo "applicationId: $package"
+          unzip -l "$apk" | grep -c 'lib/x86_64/' | xargs echo "x86_64 libraries:"
+          test "$package" = "sh.paseo"
+          echo "path=$apk" >> "$GITHUB_OUTPUT"
+          echo "package=$package" >> "$GITHUB_OUTPUT"
+
+      - name: Install Maestro
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/maestro.zip" "https://github.com/mobile-dev-inc/maestro/releases/download/cli-$MAESTRO_VERSION/maestro.zip"
+          echo "$MAESTRO_SHA256  $RUNNER_TEMP/maestro.zip" | sha256sum -c -
+          unzip -q "$RUNNER_TEMP/maestro.zip" -d "$HOME"
+          echo "$HOME/maestro/bin" >> "$GITHUB_PATH"
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Restore the AVD
+        id: avd-cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-${{ env.ANDROID_API }}-${{ env.ANDROID_TARGET }}-${{ env.ANDROID_ARCH }}-${{ env.ANDROID_PROFILE }}-v1
+      - name: Create the AVD and its boot snapshot
+        if: steps.avd-cache.outputs.cache-hit != 'true'
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: ${{ env.ANDROID_API }}
+          target: ${{ env.ANDROID_TARGET }}
+          arch: ${{ env.ANDROID_ARCH }}
+          profile: ${{ env.ANDROID_PROFILE }}
+          cores: 4
+          ram-size: 4096M
+          heap-size: 576M
+          disk-size: 6000M
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: echo "Generated the AVD snapshot for caching."
+      - name: Save the AVD
+        if: steps.avd-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-${{ env.ANDROID_API }}-${{ env.ANDROID_TARGET }}-${{ env.ANDROID_ARCH }}-${{ env.ANDROID_PROFILE }}-v1
+
+      - name: Run the Android E2E suite
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        env:
+          PROMPT_E2E_PLATFORM: android
+          PROMPT_E2E_APP_ID: ${{ steps.apk.outputs.package }}
+          PROMPT_E2E_APP_PATH: ${{ steps.apk.outputs.path }}
+          # Narrow a debugging run to scenarios whose title matches, for example "composer pill".
+          PROMPT_E2E_PATTERN: ""
+        with:
+          api-level: ${{ env.ANDROID_API }}
+          target: ${{ env.ANDROID_TARGET }}
+          arch: ${{ env.ANDROID_ARCH }}
+          profile: ${{ env.ANDROID_PROFILE }}
+          cores: 4
+          ram-size: 4096M
+          heap-size: 576M
+          disk-size: 6000M
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot-save -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: bash e2e/mobile/ci-run.sh
+
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: e2e-android-results
+          path: e2e/.results/
+          include-hidden-files: true
+          retention-days: 14
+          if-no-files-found: ignore

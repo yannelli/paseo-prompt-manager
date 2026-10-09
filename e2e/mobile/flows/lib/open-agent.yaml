@@ -1,0 +1,28 @@
+appId: sh.paseo
+---
+# Opens the agent screen through the app's deep link. The phone layout only hydrates the
+# workspace list once the drawer has been opened, and the agent route waits for it.
+- runFlow: launch.yaml
+- tapOn:
+    id: menu-button
+- extendedWaitUntil:
+    visible:
+      id: sidebar-project-list
+    timeout: 60000
+- takeScreenshot: open-agent-drawer
+- tapOn:
+    id: sidebar-close
+- waitForAnimationToEnd
+- runFlow: open-agent-link.yaml
+# A deep link that arrives before the host reconnects lands on the home screen. Open it again.
+- extendedWaitUntil:
+    visible: Send a saved prompt
+    timeout: 30000
+    optional: true
+- runFlow:
+    when:
+      notVisible: Send a saved prompt
+    file: open-agent-link.yaml
+- extendedWaitUntil:
+    visible: Send a saved prompt
+    timeout: 60000

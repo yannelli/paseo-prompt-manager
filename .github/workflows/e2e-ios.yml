@@ -1,0 +1,156 @@
+name: E2E iOS
+
+on:
+  pull_request:
+  push:
+    branches: [main, beta]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-ios-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  MAESTRO_VERSION: 2.11.0
+  MAESTRO_SHA256: 5384593cb4e7a106489e75a821d157dd43f4e438df6bc308b72e82c685e1283a
+  IOS_BUNDLE_ID: sh.paseo
+  # The Paseo simulator app is cached under this key; it only changes with the Paseo release, Xcode, or the build recipe.
+  APP_CACHE_PATH: /Users/runner/work/_temp/paseo-app
+
+jobs:
+  # No simulator build of Paseo is published, so build one from the release tag once and cache the .app.
+  build:
+    name: Build Paseo for the iOS simulator
+    runs-on: macos-15
+    timeout-minutes: 60
+    outputs:
+      cache-key: ${{ steps.key.outputs.key }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Resolve the cache key
+        id: key
+        run: |
+          paseo="$(node -p "require('./package.json').devDependencies['@getpaseo/cli']")"
+          xcode="$(xcodebuild -version | tr '\n' ' ' | tr -s ' ' | sed 's/ $//; s/ /-/g')"
+          recipe="${{ hashFiles('e2e/ios/build-app.sh', 'e2e/ios/patch-host.mjs') }}"
+          echo "paseo=$paseo" >> "$GITHUB_OUTPUT"
+          echo "key=paseo-ios-app-$paseo-$xcode-$recipe" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the simulator app
+        id: cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ env.APP_CACHE_PATH }}
+          key: ${{ steps.key.outputs.key }}
+
+      - name: Node for the Paseo build
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+
+      - name: Build Paseo
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: e2e/ios/build-app.sh "${{ steps.key.outputs.paseo }}" "$APP_CACHE_PATH"
+
+      - name: Save the simulator app
+        if: steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ env.APP_CACHE_PATH }}
+          key: ${{ steps.key.outputs.key }}
+
+  # Each simulator launch of a Maestro flow costs about a minute, so the scenarios are spread over
+  # several runners. Every shard connects the app first, then runs its own scenarios.
+  suite:
+    name: iOS simulator (${{ matrix.shard }})
+    needs: build
+    runs-on: macos-15
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: library
+            pattern: connects the app|opens the library from|creates a prompt|saves edits|asks before discarding
+          - shard: browse
+            pattern: connects the app|archives a prompt|filters by search|imports Markdown|switches the library directory
+          - shard: agent
+            pattern: connects the app|sets up Git sync|composer pill|/prompt sends|/prompts opens|Attach Saved prompt
+          - shard: phone
+            pattern: connects the app|picker sheet|focused editor field|expanded editor|library header
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Restore the simulator app
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ env.APP_CACHE_PATH }}
+          key: ${{ needs.build.outputs.cache-key }}
+          fail-on-cache-miss: true
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Install Maestro
+        run: |
+          curl -fsSL "https://github.com/mobile-dev-inc/maestro/releases/download/cli-${MAESTRO_VERSION}/maestro.zip" -o "$RUNNER_TEMP/maestro.zip"
+          echo "$MAESTRO_SHA256  $RUNNER_TEMP/maestro.zip" | shasum -a 256 -c -
+          unzip -q "$RUNNER_TEMP/maestro.zip" -d "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/maestro/bin" >> "$GITHUB_PATH"
+
+      - name: Boot a simulator and install the app
+        run: |
+          udid="$(xcrun simctl list devices available -j | node -e '
+            const devices = JSON.parse(require("fs").readFileSync(0, "utf8")).devices;
+            // Prefer iOS 18: Maestro taps on the iOS 26 simulator often only end text editing.
+            const runtimes = Object.keys(devices).filter((key) => key.includes("iOS")).sort().reverse();
+            for (const runtime of [...runtimes.filter((key) => key.includes("iOS-18")), ...runtimes]) {
+              const match = devices[runtime].find((device) => device.name.startsWith("iPhone 16"));
+              if (match) { console.error(`Using ${match.name} on ${runtime}`); console.log(match.udid); break; }
+            }')"
+          test -n "$udid" || { xcrun simctl list devices available; exit 1; }
+          echo "SIM_UDID=$udid" >> "$GITHUB_ENV"
+          xcrun simctl bootstatus "$udid" -b
+          xcrun simctl install "$udid" "$(ls -d "$APP_CACHE_PATH"/*.app | head -1)"
+          xcrun simctl get_app_container "$udid" "$IOS_BUNDLE_ID"
+          maestro --version
+
+      - name: Warm up Maestro's iOS driver
+        run: node e2e/ios/warm-up.ts
+        env:
+          PROMPT_E2E_PLATFORM: ios
+          PROMPT_E2E_DEVICE: ${{ env.SIM_UDID }}
+
+      - name: Run the iOS E2E suite
+        run: bash e2e/mobile/ci-run.sh
+        env:
+          PROMPT_E2E_PLATFORM: ios
+          PROMPT_E2E_APP_ID: ${{ env.IOS_BUNDLE_ID }}
+          PROMPT_E2E_DEVICE: ${{ env.SIM_UDID }}
+          PROMPT_E2E_PATTERN: ${{ matrix.pattern }}
+          # macOS temp directories sit behind the /var symlink, which the plugin refuses as a library path.
+          PROMPT_E2E_TMP: /Users/runner/work/_temp
+
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: e2e-ios-results-${{ matrix.shard }}
+          path: |
+            e2e/.results/
+            /Users/runner/.maestro/tests/
+          include-hidden-files: true
+          retention-days: 14
+          if-no-files-found: ignore

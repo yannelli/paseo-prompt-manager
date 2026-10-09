@@ -1,0 +1,16 @@
+appId: sh.paseo
+---
+# Focuses the Markdown field; leaves the keyboard up.
+- runFlow: lib/hide-keyboard.yaml
+- scrollUntilVisible:
+    element: Prompt Markdown.*
+    direction: DOWN
+    visibilityPercentage: 20
+- tapOn: Prompt Markdown.*
+- inputText: "# Keyboard check"
+- pressKey: Enter
+- pressKey: Enter
+- inputText: One line.
+- pressKey: Enter
+- inputText: Another line.
+- waitForAnimationToEnd

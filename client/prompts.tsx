@@ -384,7 +384,7 @@ export function PromptLibrary({ theme, layout, agentId }: Props) {
   );
 
   return (
-    <View ref={keyboard.ref} onLayout={keyboard.onLayout} style={{ flex: 1, minHeight: 0, minWidth: 0, backgroundColor: colors.surface0, padding, paddingBottom: keyboard.inset > 0 ? keyboard.inset + 8 : padding, gap: 12 }}>
+    <View testID="prompt-library" ref={keyboard.ref} onLayout={keyboard.onLayout} style={{ flex: 1, minHeight: 0, minWidth: 0, backgroundColor: colors.surface0, padding, paddingBottom: keyboard.inset > 0 ? keyboard.inset + 8 : padding, gap: 12 }}>
       {showHeader && (
         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 10, flexShrink: 1, minWidth: 0 }}>

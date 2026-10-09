@@ -247,7 +247,7 @@ export function ConfirmModal({ open, title, message, confirmLabel, colors, destr
     <Modal title={title} open={open} onOpenChange={(next) => { if (!next) onCancel(); }} icon={icon ? <Icon name={icon} size={18} color={destructive ? colors.statusDanger : colors.accent} /> : undefined}>
       <Modal.Content>
         <Text style={{ color: colors.foreground, fontSize: 14, lineHeight: 20 }}>{message}</Text>
-        <View style={{ flexDirection: "row", justifyContent: "flex-end", flexWrap: "wrap", gap: 8 }}>
+        <View testID="prompt-confirm" style={{ flexDirection: "row", justifyContent: "flex-end", flexWrap: "wrap", gap: 8 }}>
           <Button title="Cancel" onPress={onCancel} colors={colors} />
           <Button title={confirmLabel} onPress={onConfirm} colors={colors} variant={destructive ? "danger" : "primary"} />
         </View>

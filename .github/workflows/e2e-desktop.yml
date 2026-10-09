@@ -1,0 +1,55 @@
+name: E2E desktop
+
+on:
+  pull_request:
+  push:
+    branches: [main, beta]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-desktop-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  desktop:
+    name: Desktop (Linux x64)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      # The shared `page` fixture still instantiates a Playwright browser before the desktop override runs.
+      - run: npx playwright install chromium
+      - name: Install Electron runtime libraries and Xvfb
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends xvfb libgtk-3-0t64 libnss3 libasound2t64 libxss1 libxtst6 libgbm1 libatk-bridge2.0-0t64 libatk1.0-0t64 libcups2t64 libdrm2 libxkbcommon0 libxdamage1 libxrandr2 libxcomposite1 libxfixes3 libpango-1.0-0 libcairo2 fonts-liberation
+      - name: Download Paseo desktop
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(node -p "require('./package.json').devDependencies['@getpaseo/cli']")
+          mkdir -p "$RUNNER_TEMP/paseo-desktop"
+          gh release download "v$version" -R getpaseo/paseo -p "Paseo-$version-x64.tar.gz" -D "$RUNNER_TEMP/paseo-desktop"
+          tar -xzf "$RUNNER_TEMP/paseo-desktop/Paseo-$version-x64.tar.gz" -C "$RUNNER_TEMP/paseo-desktop"
+          ls -la "$RUNNER_TEMP/paseo-desktop" "$RUNNER_TEMP/paseo-desktop"/*/ || true
+          bin=$(find "$RUNNER_TEMP/paseo-desktop" -maxdepth 3 -type f -name Paseo -perm -u+x | head -n1)
+          test -n "$bin"
+          echo "PASEO_DESKTOP_BIN=$bin" >> "$GITHUB_ENV"
+      - name: Run desktop E2E
+        run: xvfb-run -a --server-args="-screen 0 1440x900x24" npm run e2e:desktop
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: e2e-desktop-results
+          path: e2e/.results/
+          retention-days: 14
+          if-no-files-found: ignore
+          include-hidden-files: true

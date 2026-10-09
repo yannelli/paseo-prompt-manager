@@ -1,0 +1,18 @@
+appId: sh.paseo
+---
+# Expanded editor: "Hide keyboard" shows only while the keyboard is up. Leaves the keyboard up.
+- runFlow: lib/open-library.yaml
+- tapOn: New prompt
+- extendedWaitUntil:
+    visible: Expand editor
+    timeout: 15000
+- tapOn: Expand editor
+- extendedWaitUntil:
+    visible: Collapse editor
+    timeout: 15000
+- assertNotVisible: Hide keyboard
+- tapOn: Prompt Markdown.*
+- extendedWaitUntil:
+    visible: Hide keyboard
+    timeout: 15000
+- takeScreenshot: mobile-expanded-keyboard

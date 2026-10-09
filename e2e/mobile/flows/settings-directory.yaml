@@ -1,0 +1,27 @@
+appId: sh.paseo
+---
+- runFlow: lib/open-library.yaml
+- assertVisible: Open Here
+- tapOn: Settings
+- extendedWaitUntil:
+    visible: Prompt library directory
+    timeout: 15000
+- tapOn: Prompt library directory
+# iOS has no select-all hook; the edit menu of a long press offers Select All.
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - longPressOn: Prompt library directory
+      - tapOn: Select All
+- runFlow: lib/select-all.yaml
+- eraseText
+- inputText: ${OTHER_DIR}
+# The save button sits below the field, where the keyboard would cover it.
+- hideKeyboard
+- scrollUntilVisible:
+    element: Save settings
+    direction: DOWN
+    timeout: 30000
+- tapOn: Save settings
+- takeScreenshot: settings-saved

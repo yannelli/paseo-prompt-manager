@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Keyboard, Platform, TextInput, type KeyboardEvent, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type ScrollView, type View } from "react-native";
+import { Keyboard, Platform, StatusBar, TextInput, type KeyboardEvent, type LayoutChangeEvent, type NativeScrollEvent, type NativeSyntheticEvent, type ScrollView, type View } from "react-native";
 
 const native = Platform.OS === "ios" || Platform.OS === "android";
 
@@ -12,12 +12,14 @@ export function useKeyboardInset() {
   const measure = () => {
     const top = keyboardTop.current;
     if (top === null || !ref.current) return setInset(0);
-    ref.current.measureInWindow((_x, y, _width, height) => setInset(Math.max(0, Math.round(y + height - top))));
+    // A measurement that lands after the keyboard hid, or after it moved, must not reapply a stale inset.
+    ref.current.measureInWindow((_x, y, _width, height) => { if (keyboardTop.current === top) setInset(Math.max(0, Math.round(y + height - top))); });
   };
   useEffect(() => {
     if (!native) return;
     const show = (event: KeyboardEvent) => {
-      keyboardTop.current = event.endCoordinates.screenY;
+      // `screenY` is in screen coordinates, but Android's `measureInWindow` leaves the status bar out of its window coordinates.
+      keyboardTop.current = event.endCoordinates.screenY - (Platform.OS === "android" ? StatusBar.currentHeight ?? 0 : 0);
       setVisible(true);
       measure();
     };
