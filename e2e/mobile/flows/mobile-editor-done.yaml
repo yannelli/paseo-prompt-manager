@@ -1,0 +1,6 @@
+appId: sh.paseo
+---
+- tapOn: Hide keyboard
+- waitForAnimationToEnd
+- assertNotVisible: Hide keyboard
+- assertVisible: Collapse editor

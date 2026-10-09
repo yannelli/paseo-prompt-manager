@@ -1,0 +1,19 @@
+appId: sh.paseo
+---
+- runFlow: lib/open-library.yaml
+- assertVisible: Open Here
+- tapOn: Settings
+- extendedWaitUntil:
+    visible: Prompt library directory
+    timeout: 15000
+- tapOn: Prompt library directory
+- eraseText
+- inputText: ${OTHER_DIR}
+# The save button sits below the field, where the keyboard would cover it.
+- hideKeyboard
+- scrollUntilVisible:
+    element: Save settings
+    direction: DOWN
+    timeout: 30000
+- tapOn: Save settings
+- takeScreenshot: settings-saved

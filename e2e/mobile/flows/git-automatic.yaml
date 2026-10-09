@@ -1,0 +1,8 @@
+appId: sh.paseo
+---
+- scrollUntilVisible:
+    element: Automatic
+    direction: DOWN
+    timeout: 30000
+- tapOn: Automatic
+- takeScreenshot: git-automatic

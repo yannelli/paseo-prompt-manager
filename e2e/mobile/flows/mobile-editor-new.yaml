@@ -1,0 +1,13 @@
+appId: sh.paseo
+---
+# New prompt editor with the details open; leaves the keyboard up on the tags field.
+- runFlow: lib/open-library.yaml
+- tapOn: New prompt
+- extendedWaitUntil:
+    visible: Prompt tags
+    timeout: 15000
+- scrollUntilVisible:
+    element: Prompt tags
+    direction: DOWN
+- tapOn: Prompt tags
+- waitForAnimationToEnd

@@ -1,0 +1,33 @@
+appId: sh.paseo
+---
+# Fresh install: welcome screen -> direct connection form -> host added -> home screen.
+- launchApp:
+    clearState: true
+    permissions:
+      all: allow
+- extendedWaitUntil:
+    visible:
+      id: welcome-screen
+    timeout: 120000
+- takeScreenshot: connect-01-welcome
+- tapOn:
+    id: welcome-direct-connection
+- extendedWaitUntil:
+    visible:
+      id: add-host-modal
+    timeout: 15000
+- tapOn:
+    id: direct-host-input
+- eraseText
+- inputText: ${ENDPOINT}
+- assertVisible:
+    id: direct-host-input
+    text: ${ENDPOINT}
+- takeScreenshot: connect-02-form
+- tapOn:
+    id: direct-host-submit
+- extendedWaitUntil:
+    visible:
+      id: message-input-root
+    timeout: 90000
+- takeScreenshot: connect-03-home

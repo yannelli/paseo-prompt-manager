@@ -1,0 +1,36 @@
+appId: sh.paseo
+---
+- runFlow: lib/open-library.yaml
+- tapOn: New prompt
+- extendedWaitUntil:
+    visible: Prompt filename
+    timeout: 15000
+- tapOn: Prompt filename
+- inputText: release-notes
+- tapOn: Prompt description
+- inputText: Draft release notes from merged PRs
+- scrollUntilVisible:
+    element: Prompt tags
+    direction: DOWN
+- tapOn: Prompt tags
+- inputText: writing, release
+- scrollUntilVisible:
+    element: Create editor subfolder
+    direction: DOWN
+- tapOn: Create editor subfolder
+- inputText: team/docs
+- tapOn: Create folder
+- extendedWaitUntil:
+    visible: Select folder team/docs
+    timeout: 15000
+- scrollUntilVisible:
+    element: Prompt Markdown
+    direction: DOWN
+- tapOn: Prompt Markdown
+- inputText: "# Release notes"
+- pressKey: Enter
+- pressKey: Enter
+- inputText: Summarize every merged PR since the last tag.
+- takeScreenshot: create-prompt-filled
+- runFlow: lib/save.yaml
+- takeScreenshot: create-prompt-saved
