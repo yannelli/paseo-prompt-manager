@@ -16,6 +16,11 @@ appId: sh.paseo
     visible:
       id: add-host-modal
     timeout: 15000
+- extendedWaitUntil:
+    visible:
+      id: direct-host-input
+    timeout: 15000
+- waitForAnimationToEnd
 - tapOn:
     id: direct-host-input
 - eraseText
