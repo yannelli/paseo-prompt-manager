@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import { promisify } from "node:util";
 
 const execute = promisify(execFile);
@@ -49,12 +50,6 @@ export async function freePort(): Promise<number> {
     const address = server.address();
     server.close(() => (typeof address === "object" && address ? resolvePort(address.port) : reject(new Error("No port"))));
   });
-  return promise;
-}
-
-function delay(ms: number): Promise<void> {
-  const { promise, resolve: done } = Promise.withResolvers<void>();
-  setTimeout(done, ms);
   return promise;
 }
 
