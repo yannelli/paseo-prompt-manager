@@ -1,17 +1,24 @@
 appId: sh.paseo
 ---
 - openLink: paseo:///h/${SERVER_ID}/agent/${AGENT_ID}
-# iOS asks once per install before a custom URL scheme opens the app; the alert takes a moment to appear.
+# iOS asks before a custom URL scheme opens the app, and the alert can take most of a minute to appear.
+# A link sent again while it is pending queues a second alert that outlives the app, so keep
+# answering alerts until the agent screen shows instead.
 - runFlow:
     when:
       platform: iOS
     commands:
-      - extendedWaitUntil:
-          visible: Open in.*
-          timeout: 10000
-          optional: true
-      - runFlow:
-          when:
-            visible: Open in.*
+      - repeat:
+          times: 12
+          while:
+            notVisible: Send a saved prompt
           commands:
-            - tapOn: Open
+            - runFlow:
+                when:
+                  visible: Open in.*
+                commands:
+                  - tapOn: Open
+            - extendedWaitUntil:
+                visible: Send a saved prompt
+                timeout: 5000
+                optional: true

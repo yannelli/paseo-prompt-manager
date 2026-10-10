@@ -45,7 +45,9 @@ jobs:
           echo "PASEO_DESKTOP_BIN=$bin" >> "$GITHUB_ENV"
       - name: Run desktop E2E
         run: xvfb-run -a --server-args="-screen 0 1440x900x24" npm run e2e:desktop
+      # The results are diagnostics only; an artifact service timeout must not fail a passing suite.
       - if: ${{ !cancelled() }}
+        continue-on-error: true
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: e2e-desktop-results

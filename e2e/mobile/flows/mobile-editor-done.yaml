@@ -1,11 +1,17 @@
 appId: sh.paseo
 ---
-# A new Maestro session needs the screen settled before its first tap lands.
+# A new Maestro session needs the screen settled before its first tap lands, and on iOS that tap
+# can still be lost. Only this button hides the keyboard here, so tapping until it goes is safe.
 - extendedWaitUntil:
     visible: Hide keyboard
     timeout: 15000
 - waitForAnimationToEnd
-- tapOn: Hide keyboard
-- waitForAnimationToEnd
+- repeat:
+    times: 3
+    while:
+      visible: Hide keyboard
+    commands:
+      - tapOn: Hide keyboard
+      - waitForAnimationToEnd
 - assertNotVisible: Hide keyboard
 - assertVisible: Collapse editor

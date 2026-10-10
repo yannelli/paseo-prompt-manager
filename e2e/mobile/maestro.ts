@@ -11,6 +11,8 @@ export const FLOW_END_LABEL = "e2e-flow-end";
 export const FLOW_END_STEP = `- assertTrue:\n    condition: \${true}\n    label: ${FLOW_END_LABEL}`;
 export const flowEnded = (output: string): boolean => new RegExp(`${FLOW_END_LABEL}[^\\n]*COMPLETED\\n$`).test(output) && !/FAILED|Exception/.test(output);
 let reinstallDriver = true;
+/** A failed run that never got through its first step, which points at the driver rather than the app. */
+class FlowNotStartedError extends Error {}
 
 /** Copies the flows next to the results, pointing them at the app id under test. */
 export async function renderFlows(): Promise<void> {
@@ -40,7 +42,15 @@ export async function runFlow(name: string, label: string, env: Record<string, s
     if (!restartable) throw error;
     await resetMaestroDriver();
     reinstallDriver = true;
-    await attemptFlow(name, `${label}-retry`, env);
+    try {
+      await attemptFlow(name, `${label}-retry`, env);
+    } catch (retryError) {
+      // A driver that dies before the first step says nothing about the app, so it gets one more clean start.
+      if (!(retryError instanceof FlowNotStartedError)) throw retryError;
+      await resetMaestroDriver();
+      reinstallDriver = true;
+      await attemptFlow(name, `${label}-restart`, env);
+    }
   }
 }
 
@@ -100,6 +110,7 @@ async function attemptFlow(name: string, label: string, env: Record<string, stri
   const output = log.join("");
   await writeFile(join(out, "maestro.log"), `maestro ${args.join(" ")}\n\n${output}`);
   if (code !== 0) {
-    throw new Error(`Maestro flow ${name} failed on ${platform} (exit ${code}). Output in ${out}\n${output.split("\n").slice(-60).join("\n")}`);
+    const started = /\.\.\. (COMPLETED|FAILED|WARNED|SKIPPED)$/m.test(output);
+    throw new (started ? Error : FlowNotStartedError)(`Maestro flow ${name} failed on ${platform} (exit ${code}). Output in ${out}\n${output.split("\n").slice(-60).join("\n")}`);
   }
 }

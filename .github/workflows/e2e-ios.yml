@@ -144,7 +144,9 @@ jobs:
           # macOS temp directories sit behind the /var symlink, which the plugin refuses as a library path.
           PROMPT_E2E_TMP: /Users/runner/work/_temp
 
+      # The results are diagnostics only; an artifact service timeout must not fail a passing suite.
       - if: ${{ !cancelled() }}
+        continue-on-error: true
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: e2e-ios-results-${{ matrix.shard }}

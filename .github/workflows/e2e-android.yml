@@ -142,7 +142,9 @@ jobs:
           disable-animations: true
           script: bash e2e/mobile/ci-run.sh
 
+      # The results are diagnostics only; an artifact service timeout must not fail a passing suite.
       - if: ${{ !cancelled() }}
+        continue-on-error: true
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: e2e-android-results

@@ -54,3 +54,29 @@ appId: sh.paseo
       id: menu-button
     timeout: 90000
 - takeScreenshot: connect-03-home
+# iOS asks once per install before a paseo:// link opens the app. A test's link sent while that alert
+# is pending lands on the home screen, so answer it now. The alert can take most of a minute to show.
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - openLink: paseo:///
+      - repeat:
+          times: 30
+          while:
+            notVisible: Open in.*
+          commands:
+            - extendedWaitUntil:
+                visible: Open in.*
+                timeout: 5000
+                optional: true
+      - runFlow:
+          when:
+            visible: Open in.*
+          commands:
+            - tapOn: Open
+            - waitForAnimationToEnd
+      - extendedWaitUntil:
+          visible:
+            id: menu-button
+          timeout: 30000
