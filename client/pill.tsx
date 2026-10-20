@@ -6,7 +6,9 @@ import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { previewLines } from "../shared/markdown";
 import { searchPrompts } from "../shared/prompts";
+import { fillTemplate, parseVariables } from "../shared/templates";
 import { inputStyle, radius, useDebounced } from "./ui";
+import { VariableForm } from "./variables";
 
 const RESULT_LIMIT = 20;
 
@@ -18,6 +20,7 @@ function PromptPicker({ theme, layout, close, ...target }: PluginButtonContentPr
   const toast = useToast();
   const searchRpc = useRpc(searchPrompts);
   const [query, setQuery] = useState("");
+  const [filling, setFilling] = useState<{ id: string; title: string; text: string } | null>(null);
   const search = useDebounced(query.trim(), 200);
   const results = useQuery({ queryKey: ["prompt-pill", search], queryFn: () => searchRpc({ query: search }), placeholderData: keepPreviousData });
   // The workspace header also shows on New Agent tabs, where no agent exists yet to send to.
@@ -34,6 +37,12 @@ function PromptPicker({ theme, layout, close, ...target }: PluginButtonContentPr
     },
   });
   const items = results.data?.items.slice(0, RESULT_LIMIT) ?? [];
+  // Prompts without variables still go through fillTemplate, which turns `\{{ name }}` into literal braces.
+  const choose = (item: { id: string; title: string; text: string }) => {
+    if (!parseVariables(item.text).length) return send.mutate({ title: item.title, text: fillTemplate(item.text, {}) });
+    send.reset();
+    setFilling(item);
+  };
   const muted = { color: colors.foregroundMuted, fontSize: 12 };
   const rows = items.map((item) => (
     <Pressable
@@ -41,7 +50,7 @@ function PromptPicker({ theme, layout, close, ...target }: PluginButtonContentPr
       accessibilityRole="button"
       accessibilityLabel={`${copy ? "Copy" : "Send"} ${item.title}`}
       disabled={send.isPending}
-      onPress={() => send.mutate(item)}
+      onPress={() => choose(item)}
       style={({ pressed }) => ({ gap: 2, paddingVertical: 6, paddingHorizontal: 8, borderRadius: radius - 4, backgroundColor: pressed ? colors.surface2 : "transparent", opacity: send.isPending ? 0.5 : 1 })}
     >
       <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
@@ -51,6 +60,23 @@ function PromptPicker({ theme, layout, close, ...target }: PluginButtonContentPr
       <Text numberOfLines={4} style={{ ...muted, lineHeight: 16 }}>{previewLines(item.text).join("\n") || item.subtitle}</Text>
     </Pressable>
   ));
+  if (filling) return (
+    <View testID="prompt-picker" style={{ width: layout.compact ? "100%" : 280, flexShrink: 1, minHeight: 0, gap: 8 }}>
+      {send.error && <Text style={{ ...muted, color: colors.statusDanger }}>{send.error.message}</Text>}
+      <VariableForm
+        key={filling.id}
+        title={filling.title}
+        content={filling.text}
+        colors={colors}
+        action={copy ? "Copy" : "Send"}
+        busy={send.isPending}
+        autoFocus={!layout.compact}
+        cancelLabel="Back"
+        onCancel={() => { send.reset(); setFilling(null); }}
+        onSubmit={(text) => send.mutate({ title: filling.title, text })}
+      />
+    </View>
+  );
   return (
     <View testID="prompt-picker" style={{ width: layout.compact ? "100%" : 280, flexShrink: 1, minHeight: 0, gap: 8 }}>
       <TextInput accessibilityLabel="Search saved prompts" value={query} onChangeText={setQuery} autoFocus={!layout.compact} autoCapitalize="none" autoCorrect={false} placeholder="Search prompts" placeholderTextColor={colors.foregroundMuted} style={{ ...inputStyle(colors), paddingVertical: 7, fontSize: 13 }} />

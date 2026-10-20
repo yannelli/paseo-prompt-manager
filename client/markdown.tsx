@@ -2,13 +2,22 @@ import type { PluginSurfaceProps } from "@getpaseo/plugin/client";
 import { useMemo } from "react";
 import { Text, View } from "react-native";
 import { parseInlineMarkdown, parseMarkdown, type MarkdownInline } from "../shared/markdown";
+import { describeVariable } from "../shared/templates";
 
 type Props = { content: string; theme: PluginSurfaceProps["theme"] };
+
+/** A template variable, filled in when the prompt is sent. Shows its default when it has one. */
+function Variable({ name, fallback, theme }: { name: string; fallback?: string; theme: Props["theme"] }) {
+  const colors = theme.colors;
+  const label = describeVariable({ name, fallback });
+  return <Text accessibilityLabel={`Variable ${label}`} style={{ color: colors.accent, backgroundColor: colors.surface2, fontWeight: "600" }}>{` ${label} `}</Text>;
+}
 
 function Inline({ tokens, theme }: { tokens: MarkdownInline[]; theme: Props["theme"] }) {
   const colors = theme.colors;
   return tokens.map((token, index) => {
     if (token.kind === "text") return <Text key={index} style={{ color: colors.foreground }}>{token.text}</Text>;
+    if (token.kind === "variable") return <Variable key={index} name={token.name} fallback={token.fallback} theme={theme} />;
     if (token.kind === "code") return <Text key={index} style={{ color: colors.foreground, backgroundColor: colors.surface2, fontFamily: "monospace" }}>{token.text}</Text>;
     return (
       <Text key={index} style={{ color: colors.foreground, fontWeight: token.kind === "bold" ? "700" : undefined, fontStyle: token.kind === "italic" ? "italic" : undefined, textDecorationLine: token.kind === "link" ? "underline" : undefined }}>

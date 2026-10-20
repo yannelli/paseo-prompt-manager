@@ -90,6 +90,103 @@ test.describe("sending prompts to agents", () => {
     expect(blocks.slice(1).map((block) => block.text ?? "").join("\n")).toContain(CODE_REVIEW);
   });
 
+  test.describe("prompts with variables", () => {
+    const TEMPLATE = "# Clean up\n\nTake a look at {{ module }}, remove dead code, and assign the review to {{ person | me }}.";
+    const filled = (module: string, person: string) => `# Clean up\n\nTake a look at ${module}, remove dead code, and assign the review to ${person}.`;
+
+    test.beforeEach(async ({ library }) => {
+      await library.seed("clean-up", { content: TEMPLATE });
+    });
+
+    test("the composer pill asks for values, prefilled with defaults, before sending", async ({ app, agent }) => {
+      await app.openAgent(agent.id);
+      await app.host.button("Send a saved prompt").click();
+      await app.picker.field("Search saved prompts").fill("clean");
+      await app.picker.button("Send Clean up").click();
+
+      await expect(app.picker.field("Value for person")).toHaveValue("me");
+      // The popover can keep the results list's height, so the buttons sit above the fields.
+      await expect(app.picker.button("Send filled prompt")).toBeInViewport();
+      await expect(app.picker.button("Send filled prompt")).toBeDisabled();
+      await app.picker.field("Value for module").fill("server/git.ts");
+      await app.picker.button("Send filled prompt").click();
+
+      await app.toast('Sent "Clean up".');
+      await expect(app.picker.root).toBeHidden();
+      await expect.poll(() => receivedTexts(agent)).toEqual(["Ready for a saved prompt.", filled("server/git.ts", "me")]);
+    });
+
+    test("Back returns to the results without sending", async ({ app, agent }) => {
+      await app.openAgent(agent.id);
+      await app.host.button("Send a saved prompt").click();
+      await app.picker.button("Send Clean up").click();
+      await app.picker.button("Back").click();
+      await expect(app.picker.button("Send Code review")).toBeVisible();
+      expect(await receivedTexts(agent)).toEqual(["Ready for a saved prompt."]);
+    });
+
+    test("the workspace header button copies the filled prompt", async ({ app, agent, desktop }) => {
+      if (!desktop) await app.page.context().grantPermissions(["clipboard-read", "clipboard-write"], { origin: app.origin });
+      await app.openAgent(agent.id);
+      await app.host.button("Copy a saved prompt").click();
+      await app.picker.button("Copy Clean up").click();
+      await app.picker.field("Value for module").fill("client/");
+      await app.picker.field("Value for person").fill("Sam");
+      await app.picker.button("Copy filled prompt").click();
+
+      await app.toast('Copied "Clean up". Paste it into the composer.');
+      if (!desktop) expect(await app.page.evaluate(() => navigator.clipboard.readText())).toBe(filled("client/", "Sam"));
+      expect(await receivedTexts(agent)).toEqual(["Ready for a saved prompt."]);
+    });
+
+    test("/prompt explains that a prompt with variables is filled in from the Prompts button", async ({ app, agent }) => {
+      await app.openAgent(agent.id);
+      await app.composer().fill("/prompt clean-up");
+      await app.host.button("Send message").click();
+      await app.toast("This prompt has variables without defaults (module). Choose it from the Prompts button to fill them in.");
+      expect(await receivedTexts(agent)).toEqual(["Ready for a saved prompt."]);
+    });
+
+    test("/prompt sends a prompt whose variables all have defaults", async ({ app, agent, library }) => {
+      await library.seed("assign", { content: "# Assign\n\nAssign the review to {{ person | me }}." });
+      await app.openAgent(agent.id);
+      await app.composer().fill("/prompt assign");
+      await app.host.button("Send message").click();
+      await expect.poll(() => receivedTexts(agent)).toEqual(["Ready for a saved prompt.", "# Assign\n\nAssign the review to me."]);
+    });
+
+    test("braces in code and escaped braces are sent as written, in one tap", async ({ app, agent, library }) => {
+      const content = "# React\n\nKeep \\{{ name }} and `style={{ flex: 1 }}`.\n\n```vue\n<p>{{ message }}</p>\n```";
+      await library.seed("react", { content });
+      await app.openAgent(agent.id);
+      await app.host.button("Send a saved prompt").click();
+      await app.picker.field("Search saved prompts").fill("react");
+      await app.picker.button("Send React").click();
+
+      await app.toast('Sent "React".');
+      await expect.poll(() => receivedTexts(agent)).toEqual(["Ready for a saved prompt.", content.replace("\\{{", "{{")]);
+    });
+
+    test("the agent panel asks for values before sending", async ({ app, agent }) => {
+      await app.openAgent(agent.id);
+      await app.composer().fill("/prompts");
+      await app.host.button("Send message").click();
+      await app.openPrompt("Clean up");
+      await expect(app.text("Variables: module, person = me")).toBeVisible();
+      await app.button("Preview").click();
+      await expect(app.text("person = me")).toBeVisible();
+      await expect(app.text("module")).toBeVisible();
+      await app.button("Edit").click();
+      await app.button("Send saved prompt to agent").click();
+
+      await expect(app.host.field("Value for person")).toHaveValue("me");
+      await app.host.field("Value for module").fill("shared/");
+      await app.host.button("Send filled prompt").click();
+      await app.toast("Prompt sent to this agent.");
+      await expect.poll(() => receivedTexts(agent)).toEqual(["Ready for a saved prompt.", filled("shared/", "me")]);
+    });
+  });
+
   for (const [item, expected] of [["Open prompt library", "Markdown prompts shared across agents on this host."], ["Use saved prompts", "Save instructions and send them to this agent."]] as const) {
     test(`the Command Center item "${item}" opens the plugin`, async ({ app, agent }) => {
       test.skip(app.compact, "Phones have no Command Center shortcut in the sidebar.");

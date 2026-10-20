@@ -1,7 +1,7 @@
 # End-to-end tests
 
 Created: 2026-10-09
-Last updated: 2026-10-09
+Last updated: 2026-10-19
 
 The E2E suites run the plugin inside real Paseo clients: the web UI that the daemon serves, the Linux desktop app, the Android app, and the iOS app. Each client connects to a daemon started for the test run. After each scenario, the test checks the result where it is stored: prompt files and versions in the library directory, the plugin settings file, the Git remote, or the prompts the agent received.
 
@@ -113,7 +113,8 @@ Every client covers:
 - Git sync set up and Sync now against a local bare repository;
 - sending a prompt from the composer pill, `/prompt <id>`, and the `/prompts` agent panel;
 - copying a prompt from the workspace header button (web and desktop);
-- attaching a saved prompt to a message.
+- attaching a saved prompt to a message;
+- filling in a prompt's variables, prefilled with defaults, from the composer pill. Web and desktop also cover the header button, the agent panel, `/prompt` with and without defaults, and code braces sent as written.
 
 The wide web and desktop clients also cover both Command Center items, and the web client covers the browser file picker. The phone layouts (web phone, Android, iOS) also check the issue #9 fixes: the picker sheet opens at most of the screen height and reaches its last result, and the library header shows only on the list. Android and iOS also check that the focused field stays above the keyboard and that **Done** in the expanded editor hides the keyboard.
 

@@ -229,6 +229,15 @@ describe(`Prompt manager on ${platform}`, () => {
       assert.deepEqual(await receivedTexts(target), [READY, CODE_REVIEW]);
     });
 
+    // The title contains "composer pill", so the iOS agent shard picks it up.
+    scenario("the composer pill fills in a prompt's variables before sending", async ({ library, flow, agent }) => {
+      await library.seed("clean-up", { content: "# Clean up\n\nTake a look at {{ module }}, remove dead code, and assign the review to {{ person | me }}." });
+      const target = await agent();
+      await flow("agent-variables.yaml");
+      await eventually(() => receivedTexts(target), (texts) => texts.length >= 2, "the agent did not receive the prompt");
+      assert.deepEqual(await receivedTexts(target), [READY, "# Clean up\n\nTake a look at server/git.ts, remove dead code, and assign the review to me."]);
+    });
+
     scenario("Attach Saved prompt adds the prompt to a message", async ({ library, flow, agent }) => {
       await seed(library);
       const target = await agent();
