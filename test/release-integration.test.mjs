@@ -16,7 +16,8 @@ async function repository(t) {
   t.after(() => rm(root, { recursive: true, force: true }));
   const cwd = join(root, "checkout");
   await mkdir(cwd);
-  const git = (...args) => execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+  const env = { ...process.env, GIT_AUTHOR_NAME: "Release test", GIT_AUTHOR_EMAIL: "release@example.test" };
+  const git = (...args) => execFileSync("git", args, { cwd, env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
   git("init", "--bare", join(root, "origin.git"));
   git("init", "-b", "main");
   git("config", "user.name", "Release test");
@@ -44,10 +45,17 @@ async function github(t) {
       return;
     }
     assert.equal(request.method, "POST");
-    assert.equal(request.url, "/repos/test/prompts/releases");
     const chunks = [];
     for await (const chunk of request) chunks.push(chunk);
     const payload = JSON.parse(Buffer.concat(chunks));
+    if (request.url === "/graphql") {
+      assert.deepEqual(payload.variables, { owner: "test", name: "prompts" });
+      const commits = [...payload.query.matchAll(/(c\d+): object\(oid: "[0-9a-f]{40}"\)/g)].map(([, alias]) => [alias, { authors: { nodes: [{ email: "Release@example.test", user: { login: "release-tester" } }] } }]);
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(JSON.stringify({ data: { repository: Object.fromEntries(commits) } }));
+      return;
+    }
+    assert.equal(request.url, "/repos/test/prompts/releases");
     assert.doesNotMatch(payload.body, /paseo-prompt-manager-release/);
     state.attempts++;
     if (state.failNext) { state.failNext = false; response.writeHead(500); response.end("temporary failure"); return; }
@@ -90,7 +98,8 @@ test("publication creates 0.1.0, repairs interrupted releases, and bumps once", 
   await publish();
   assert.equal(state.attempts, 2);
   assert.equal(git("rev-parse", "HEAD"), first);
-  assert.match(published.get("v0.1.0").body, /feat: add prompt library/);
+  assert.match(published.get("v0.1.0").body, /feat: add prompt library \(\w{7}\) by @release-tester/);
+  assert.match(published.get("v0.1.0").body, /^# 0\.1\.0\n[\s\S]*## Contributors\n\n- @release-tester\n/);
   assert.equal(published.get("v0.1.0").prerelease, false);
   assert.equal(published.get("v0.1.0").make_latest, "true");
   git("commit", "--allow-empty", "-m", "fix: repair the badge");

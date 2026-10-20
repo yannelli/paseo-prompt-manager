@@ -58,13 +58,34 @@ function releaseTags(...args) {
   return git("tag", "--list", ...args, "v*").split("\n").map(parseTag).filter(Boolean).sort(compareTags);
 }
 
+export function commitAuthors(name, email, message) {
+  const authors = [{ name, email }];
+  for (const [, coName, coEmail] of message.matchAll(/^Co-authored-by:\s*(.*?)\s*<([^>\n]+)>\s*$/gim)) authors.push({ name: coName, email: coEmail });
+  // Bots and no-reply service addresses are not people to credit.
+  return authors.filter((author) => !/\[bot\]/i.test(`${author.name} ${author.email}`) && !/^no-?reply@/i.test(author.email));
+}
+
 function commitsSince(tag) {
-  const records = git("log", ...(tag ? [`${tag}..HEAD`] : []), "--format=%H%x00%B%x00").split("\0");
+  const records = git("log", ...(tag ? [`${tag}..HEAD`] : []), "--format=%H%x00%an%x00%ae%x00%B%x00").split("\0");
   const commits = [];
-  for (let i = 0; i + 1 < records.length; i += 2) {
-    commits.push({ hash: records[i].trim(), message: records[i + 1].trim() });
+  for (let i = 0; i + 3 < records.length; i += 4) {
+    const message = records[i + 3].trim();
+    commits.push({ hash: records[i].trim(), message, authors: commitAuthors(records[i + 1], records[i + 2], message) });
   }
   return commits;
+}
+
+function mention(author) {
+  return author.login ? `@${author.login}` : author.name;
+}
+
+function uniqueAuthors(authors) {
+  const seen = new Map();
+  for (const author of authors) {
+    const key = (author.login ?? author.email).toLowerCase();
+    if (!seen.has(key)) seen.set(key, author);
+  }
+  return [...seen.values()];
 }
 
 export function releaseNotes(version, previousTag, commits) {
@@ -78,17 +99,53 @@ export function releaseNotes(version, previousTag, commits) {
     const matching = commits.filter(({ message }) => matches(message));
     if (!matching.length) continue;
     notes.push(`## ${title}`, "");
-    for (const { hash, message } of matching) {
+    for (const { hash, message, authors = [] } of matching) {
       const [subject, ...body] = message.split("\n");
-      notes.push(`- ${subject} (${hash.slice(0, 7)})`);
+      const credit = uniqueAuthors(authors).map(mention).join(", ");
+      notes.push(`- ${subject} (${hash.slice(0, 7)})${credit ? ` by ${credit}` : ""}`);
       if (releaseType(message) === "major" && body.join("\n").trim()) {
         notes.push("", ...body.map((line) => `  ${line}`), "");
       }
     }
     notes.push("");
   }
+  const contributors = uniqueAuthors(commits.flatMap(({ authors = [] }) => authors));
+  if (contributors.length) notes.push("## Contributors", "", ...contributors.map((author) => `- ${mention(author)}`), "");
   notes.push(previousTag ? `Changes since ${previousTag}.` : "First release.", "");
   return notes.join("\n");
+}
+
+/** Maps each author and co-author email of the commits to a GitHub login. */
+async function githubLogins(commits, repository, token) {
+  const [owner, name] = repository.split("/");
+  const endpoint = `${process.env.GITHUB_API_URL || "https://api.github.com"}/graphql`;
+  const logins = new Map();
+  for (let start = 0; start < commits.length; start += 50) {
+    const fields = commits.slice(start, start + 50).map(({ hash }, index) =>
+      `c${index}: object(oid: "${hash}") { ... on Commit { authors(first: 20) { nodes { email user { login } } } } }`);
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ query: `query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) { ${fields.join(" ")} } }`, variables: { owner, name } }),
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const { data, errors } = await response.json();
+    if (errors?.length) throw new Error(errors[0].message);
+    for (const commit of Object.values(data.repository)) {
+      for (const node of commit?.authors.nodes ?? []) if (node.user?.login) logins.set(node.email.toLowerCase(), node.user.login);
+    }
+  }
+  return logins;
+}
+
+async function creditLogins(commits, repository) {
+  try {
+    const logins = await githubLogins(commits, repository, process.env.GH_TOKEN || process.env.GITHUB_TOKEN);
+    return commits.map((commit) => ({ ...commit, authors: commit.authors.map((author) => ({ ...author, login: logins.get(author.email.toLowerCase()) })) }));
+  } catch (error) {
+    console.warn(`Could not look up GitHub logins, so release notes credit authors by name: ${error.message}`);
+    return commits;
+  }
 }
 
 async function publishRelease(tag, notes, repository) {
@@ -142,7 +199,8 @@ export async function release({ dryRun = true } = {}) {
   const version = beta ? betaVersion(base, allTags) : base;
   if (allTags.some((tag) => tag.version === version)) throw new Error(`Tag v${version} already exists`);
   const notesFrom = beta ? previous : previousStable;
-  const notes = releaseNotes(version, notesFrom?.tag, commitsSince(notesFrom?.tag));
+  const commits = commitsSince(notesFrom?.tag);
+  const notes = releaseNotes(version, notesFrom?.tag, dryRun ? commits : await creditLogins(commits, repository));
   if (dryRun) {
     console.log(notes);
     return version;
@@ -156,7 +214,8 @@ export async function release({ dryRun = true } = {}) {
   const notesPath = join(directory, "notes.md");
   try {
     writeFileSync(notesPath, `${notes}\n${releaseMarker}\n`);
-    git("tag", "-a", `v${version}`, "-F", notesPath);
+    // Verbatim keeps the Markdown headings, which git would strip as comments.
+    git("tag", "-a", "--cleanup=verbatim", `v${version}`, "-F", notesPath);
     git("push", "--atomic", "origin", `HEAD:refs/heads/${branch}`, `refs/tags/v${version}`);
   } finally {
     rmSync(directory, { recursive: true, force: true });

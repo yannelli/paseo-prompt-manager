@@ -29,6 +29,8 @@ Paseo stores the selector and checks it again for updates, so a `@beta` install 
 
 `package.json` and `package-lock.json` hold the version of the newest release tag reachable from the branch. The script commits `chore(release): <version>`, pushes an annotated tag, and creates the GitHub release with the repository's `GITHUB_TOKEN`.
 
+The release notes credit the author and each `Co-authored-by` trailer after each entry, and list every contributor since the last release tag under **Contributors**. The script looks up GitHub logins for these emails through the GraphQL API, so the notes mention `@login`. When the lookup fails, the notes use the git names. Bots and `noreply@` or `no-reply@` addresses get no credit.
+
 ## Workflow step
 
 The **Publish npm package** step reads the name and version from `package.json` and runs `npm publish --tag beta` for beta versions and `npm publish --tag latest` for the rest. It skips the publish when npm already has that version, so a rerun completes a failed publish.
