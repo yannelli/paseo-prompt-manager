@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { prepare, verifyConditions } from "../scripts/release-manifests.mjs";
-import { betaVersion, compareTags, nextVersion, parseTag, releaseNotes, releaseType } from "../scripts/release.mjs";
+import { betaVersion, commitAuthors, compareTags, nextVersion, parseTag, releaseNotes, releaseType } from "../scripts/release.mjs";
 
 test("Conventional Commits select patch, minor, and major releases", () => {
   const cases = [
@@ -40,6 +40,19 @@ test("release notes preserve breaking details and commit references", () => {
   assert.match(notes, /fix: repair a hook/);
   assert.doesNotMatch(notes, /ci: check titles/);
   assert.match(releaseNotes("0.1.0", undefined, []), /First release/);
+});
+
+test("release notes credit authors and co-authors but not bots or no-reply addresses", () => {
+  const message = "feat: add variables (#21)\n\nCo-authored-by: Sam <sam@example.test>\nCo-authored-by: Claude <noreply@anthropic.com>\nCo-authored-by: helper[bot] <1+helper[bot]@users.noreply.github.com>";
+  assert.deepEqual(commitAuthors("Sev", "sev@example.test", message), [{ name: "Sev", email: "sev@example.test" }, { name: "Sam", email: "sam@example.test" }]);
+  assert.deepEqual(commitAuthors("github-actions[bot]", "41898282+github-actions[bot]@users.noreply.github.com", "chore(release): 0.5.0"), []);
+  const notes = releaseNotes("0.5.0", "v0.4.4", [
+    { hash: "07f7be9a78", message, authors: [{ name: "Sev", email: "sev@example.test", login: "sevgit" }, { name: "Sam", email: "sam@example.test" }] },
+    { hash: "1234567890", message: "docs: explain variables", authors: [{ name: "Sev", email: "other@example.test", login: "sevgit" }, { name: "Ann", email: "ann@example.test", login: "ann" }] },
+  ]);
+  assert.match(notes, /^- feat: add variables \(#21\) \(07f7be9\) by @sevgit, Sam$/m);
+  assert.match(notes, /## Contributors\n\n- @sevgit\n- Sam\n- @ann\n\nChanges since v0\.4\.4\./);
+  assert.doesNotMatch(releaseNotes("0.1.0", undefined, [{ hash: "abc", message: "fix: repair" }]), /Contributors| by /);
 });
 
 async function fixture(t) {
